@@ -14,8 +14,31 @@ class DevAddr
   ]
   define_option_params_initializer
 end
+
+
+class AppNonce
+  include Binary
   
+  bit_structure [
+    :little_endian,
+    [23..0, :value,   :numeric],
+  ]
+  define_option_params_initializer
+end
+
+
+class NetId
+  include Binary
   
+  bit_structure [
+    :little_endian,
+    [23..17, :nwkid,   :numeric],
+    [16..0,  :addr,    :numeric],
+  ]
+  define_option_params_initializer
+end
+  
+
 class FCtrl
   include Binary
   
@@ -232,8 +255,18 @@ class JoinRequestPayload
   end
 end
 
+
 class JoinAcceptPayload
-  :appnonce :netid :devaddr :dlsettings :rxdelay :cflist
+  include Binary
+
+  attr_accessor :appnonce, :netid, :devaddr, :dlsettings, :rxdelay, :cflist
+
+  define_option_params_initializer
+
+  def encode
+    [appnonce, netid, devaddr, dlsettings, rxdelay, cflist].map(&:encode).join('')
+  end
+end
 
 
 class PHYPayload
@@ -248,14 +281,19 @@ class PHYPayload
 
 
   def encode(appskey = nil, nwkskey = nil)
-    if mhdr.mtype == MHDR::JoinRequest
-      encode_join_request(appskey) # appskey means appkey
-    elsif mhdr.mtype == MHDR::JoinAccept
-      encode_join_accept(appskey) # appskey means appkey
-    elsif appskey
-      encode_with_encrypt(appskey, nwkskey)
+    case mhdr.mtype
+    when MHDR::JoinRequest
+      # appskey means appkey
+      encode_join_request(appskey)
+    when MHDR::JoinAccept
+      # appskey means appkey
+      encode_join_accept(appskey)
     else
-      encode_without_encrypt
+      if appskey
+        encode_with_encrypt(appskey, nwkskey)
+      else
+        encode_without_encrypt
+      end
     end
   end
 
@@ -264,26 +302,29 @@ class PHYPayload
       mhdr.encode,
       macpayload.encode,
     ].join('')
-    mic = data.get_mic(appkey)
+
+    mic = if appkey
+            data.get_mic(appkey)
+          else
+            ''
+          end
 
     [data, mic].join('')
   end
 
   def encode_join_accept(appkey)
     mhdr_encoded = mhdr.encode
-    enc_base = [
-      macpayload.appnonce.encode,
-      macpayload.netid.encode,
-      macpayload.devaddr.encode,
-      macpayload.dlsettings.encode,
-      macpayload.rxdelay.encode,
-      macpayload.cflist.encode,
-    ].join('')
+    payload_encoded = macpayload.encode.force_encoding('ASCII-8BIT')
 
-    encrypted = enc_base.encrypt(appkey)
-    mic = (mhdr_encoded + encrypted).get_mic(appkay)
+    if appkey
+      mic = (mhdr_encoded + payload_encoded).get_mic(appkey)
+      payload_encrypted = (payload_encoded+mic).encrypt_join_accept(appkey)
+    else
+      mic = nil
+      payload_encrypted = payload_encoded
+    end
 
-    [mhdr_encoded, encrypted, mic].join('')
+    [mhdr_encoded, payload_encrypted].join('')
   end
 
   def encode_with_encrypt(appskey, nwkskey)
@@ -364,8 +405,30 @@ phypayload = PHYPayload.new(
   direction: :up
 )
 
-appskey = ["7BF7C495B7C12A92CB856B35FCD18598"].pack('H*')
-nwkskey = ["AF0196F6C67B5B65D20B925BCF010290"].pack('H*')
+phypayload = PHYPayload.new(
+  mhdr: MHDR.new(
+    mtype: MHDR::JoinAccept
+  ),
+  macpayload: JoinAcceptPayload.new(
+    appnonce: AppNonce.new(value: 0x010203),
+    netid:    NetId.new(
+                nwkid:   0b0001000,
+                addr:    0b0_00010001_00010010
+              ),
+    devaddr: DevAddr.new(
+               nwkid:   0b1000000,
+               nwkaddr: 0b0_10000001_10000010_10000011
+             ),
+    dlsettings: "\x00",
+    rxdelay: "\x00",
+  ),
+  mic: '',
+  direction: :up
+)
 
-pp phypayload.encode(appskey, nwkskey).to_hexstr
+appskey = ["01" * 16].pack('H*')
+nwkskey = ["02" * 16].pack('H*')
+
+pp phypayload.encode.to_hexstr
+pp phypayload.encode(appskey).to_hexstr
 

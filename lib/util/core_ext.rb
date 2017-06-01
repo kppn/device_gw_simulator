@@ -95,7 +95,8 @@ class String
   end
 
   def bound(len, pad = "\x0")
-    self + (pad * (len - self.length%len))
+    next_bound = (self.length + (len-1)) / len  * len
+    self + (pad * (next_bound - self.length))
   end
 end
 

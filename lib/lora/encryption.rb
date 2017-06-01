@@ -6,9 +6,18 @@ module LoRaEncrypt
   refine String do
     using Binary
 
-    def encrypt(key)
-      ci = OpenSSL::Cipher.new("AES-128-CBC")
-      ci.encrypt
+    def encrypt(key, kind = :payload)
+      ci = case kind
+           when :payload
+             ci = OpenSSL::Cipher.new("AES-128-CBC")
+             ci.encrypt
+             ci
+           when :join_accept
+             ci = OpenSSL::Cipher.new("AES-128-ECB")
+             ci.decrypt
+             ci.padding = 0
+             ci
+           end
       ci.key = key
 
       self.bound(16).scan(/.{16}/)
@@ -31,6 +40,11 @@ module LoRaEncrypt
                      .map.with_index{|d, i| d.xor (a + (i+1).pack8).encrypt(key)}
                      .join
       enc_data[0...self.length]
+    end
+
+
+    def encrypt_join_accept(key)
+      self.encrypt(key, :join_accept)
     end
 
     def cmac(key)

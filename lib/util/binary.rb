@@ -351,4 +351,3 @@ module Binary
 
 end
 
-
