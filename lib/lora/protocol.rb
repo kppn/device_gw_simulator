@@ -1,5 +1,7 @@
 require_relative '../util/binary'
-require_relative 'encryption'
+require_relative 'lora_encryption'
+require_relative 'lora_encryption_service'
+
 require 'pp'
 require 'awesome_print'
 
@@ -118,37 +120,18 @@ end
   
   
 class FRMPayload
-  using LoRaEncrypt
-
   attr_accessor :value
   
   def initialize(v)
     @value = v
   end
   
-  # a_params = direction, devaddr, fcnt
-  def encode(key = nil, *a_params)
-    encoded_value = value&.force_encoding('ASCII-8BIT')
-    if key
-      if a_params.length != 3
-        raise ArgumentError.new('key specified(encrypt), A parameters must be  direction, devaddr, fcnt')
-      end
-      encoded_value.encrypt_payload(key, *a_params)
-    else
-      encoded_value
-    end
+  def encode
+    value.encode&.force_encoding('ASCII-8BIT')
   end
 
-  # a_params = direction, devaddr, fcnt
-  def self.from_bytes(byte_str, key = nil, *a_params)
-    if key
-      if a_params.length != 3
-        raise ArgumentError.new('key specified(encrypt), A parameters must be  direction, devaddr, fcnt')
-      end
-      self.new(byte_str.encrypt_payload(key, *a_params))
-    else
-      self.new(byte_str)
-    end
+  def self.from_bytes(byte_str)
+    self.new(byte_str)
   end
 end
   
@@ -178,7 +161,6 @@ end
  
 
 class MACPayload
-  using LoRaEncrypt
   include Binary
   
   attr_accessor :fhdr, :frmpayload
@@ -186,19 +168,8 @@ class MACPayload
   define_option_params_initializer
   
 
-  # a_params = direction
-  def encode(key = nil, *a_params)
-    if key && a_params.length != 1
-      raise ArgumentError.new('key specified(encrypt), A parameters must be  direction')
-    end
-
-    frmpayload_enc = 
-      if key
-        frmpayload.encode(key, *a_params, fhdr.devaddr.encode, fhdr.fcnt)
-      else
-        frmpayload.encode
-      end
-
+  def encode
+    frmpayload_enc = frmpayload.encode
     if frmpayload_enc.bytesize == 0
       fport = nil
     end
@@ -207,20 +178,13 @@ class MACPayload
   end
 
   # a_params = direction
-  def self.from_bytes(byte_str, key = nil, *a_params)
+  def self.from_bytes(byte_str)
     macpayload = self.new
 
-    macpayload.fhdr      = FHDR.from_bytes(byte_str[0..-1])
-    foptslen = macpayload.fhdr.fctrl.foptslen
-    macpayload.fport = FPort.from_bytes(byte_str[(7+foptslen)..(7+foptslen)])
-    payload_bytes = byte_str[(8+foptslen)..-1]
-    if key
-      macpayload.frmpayload = FRMPayload.from_bytes(
-        payload_bytes, key, *a_params, macpayload.fhdr.devaddr.encode, macpayload.fhdr.fcnt
-      )
-    else
-      macpayload.frmpayload = FRMPayload.from_bytes(payload_bytes)
-    end
+    macpayload.fhdr       = FHDR.from_bytes(byte_str[0..-1])
+    foptslen              = macpayload.fhdr.fctrl.foptslen
+    macpayload.fport      = FPort.from_bytes(byte_str[(7+foptslen)..(7+foptslen)])
+    macpayload.frmpayload = FRMPayload.from_bytes(byte_str[(8+foptslen)..-1])
 
     macpayload
   end
@@ -253,6 +217,16 @@ class JoinRequestPayload
   def encode
     [appeui, deveui, devnonce].join('')
   end
+
+  def self.from_bytes(byte_str)
+    join_request_payload = self.new
+
+    join_request_payload.appeui  = byte_str[0..7]
+    join_request_payload.deveui  = byte_str[8..15]
+    join_request_payloaddevnonce = byte_str[9..-1]
+
+    join_request_payload
+  end
 end
 
 
@@ -266,11 +240,25 @@ class JoinAcceptPayload
   def encode
     [appnonce, netid, devaddr, dlsettings, rxdelay, cflist].map(&:encode).join('')
   end
+
+  def self.from_bytes(byte_str)
+    join_accept_payload = self.new
+
+    join_accept_payload.appnonce   = byte_str[0..2]
+    join_accept_payload.netid      = NetId.from_bytes(byte_str[0..2])
+    join_accept_payload.devaddr    = DevAddr.from_bytes(byte_str[3..6])
+    join_accept_payload.dlsettings = byte_str[7]
+    join_accept_payload.rxdelay    = byte_str[8]
+    if byte_str.bytesize >= 9
+      join_accept_payload.cflist     = byte_str[9..-1]
+    end
+
+    join_accept_payload
+  end
 end
 
 
 class PHYPayload
-  using LoRaEncrypt
   include Binary
 
   attr_accessor :mhdr, :macpayload
@@ -280,116 +268,63 @@ class PHYPayload
   define_option_params_initializer
 
 
-  def encode(appskey = nil, nwkskey = nil)
-    case mhdr.mtype
-    when MHDR::JoinRequest
-      # appskey means appkey
-      encode_join_request(appskey)
-    when MHDR::JoinAccept
-      # appskey means appkey
-      encode_join_accept(appskey)
+  def encode(keys = {})
+    if keys.size == 0
+      mhdr.encode + macpayload.encode
     else
-      if appskey
-        encode_with_encrypt(appskey, nwkskey)
-      else
-        encode_without_encrypt
-      end
+      service = LoRaEncryptionService.new(self, keys)
+      data, @mic = service.get_encrypted_payload_and_mic
+
+      data + @mic
     end
   end
 
-  def encode_join_request(appkey)
-    data = [
-      mhdr.encode,
-      macpayload.encode,
-    ].join('')
 
-    mic = if appkey
-            data.get_mic(appkey)
-          else
-            ''
-          end
+  def self.from_bytes(byte_str, direction = :up, keys)
+    service = LoRaDecryptionService.new(byte_str, direction, keys)
+    phypayloed = service.get_decrypted_phypayload(bytes, direction, keys)
 
-    [data, mic].join('')
-  end
-
-  def encode_join_accept(appkey)
-    mhdr_encoded = mhdr.encode
-    payload_encoded = macpayload.encode.force_encoding('ASCII-8BIT')
-
-    if appkey
-      mic = (mhdr_encoded + payload_encoded).get_mic(appkey)
-      payload_encrypted = (payload_encoded+mic).encrypt_join_accept(appkey)
-    else
-      mic = nil
-      payload_encrypted = payload_encoded
-    end
-
-    [mhdr_encoded, payload_encrypted].join('')
-  end
-
-  def encode_with_encrypt(appskey, nwkskey)
-    macpayload_encoded = macpayload.encode(appskey, direction)
-    mic = calc_mic(appskey, nwkskey)
-    [mhdr.encode, macpayload_encoded, mic.encode].join('')
-  end
-
-  def encode_without_encrypt
-    [mhdr.encode, macpayload.encode].join('')
-  end
-
-  def calc_mic(appskey, nwkskey)
-    # MIC
-    #   msg = MHDR | FHDR | FPort | FRMPayload
-    #   cmac = aes128_cmac(NwkSKey, B0 | msg)
-    #   MIC = cmac[0..3]
-    mic_base = [
-      mhdr.encode,
-      macpayload.fhdr.encode,
-      macpayload.instance_variable_get("@fport").encode,
-      macpayload.frmpayload.encode(
-        appskey,
-        direction,
-        macpayload.fhdr.devaddr.encode,
-        macpayload.fhdr.fcnt
-      )
-    ].join
-
-    mic_base.calc_mic(nwkskey, direction, macpayload.fhdr.devaddr.encode, macpayload.fhdr.fcnt)
-  end
-
-  def calc_mic_join_request(appkey)
-    mic_base = [
-      mhdr.encode,
-      macpayload.frmpayload.encode
-    ].join
-
-    mic_base.get_mic(appkey)
-  end
-
-  def calc_mic_join_accept(appkey)
-    mic_base = [
-      mhdr.encode,
-      macpayload.frmpayload.encode
-    ].join
-
-    mic_base.get_mic(appkey)
-  end
-
-  def self.from_bytes(byte_str, key = nil, direction = :up)
-    phypayload = self.new
-
-    phypayload.mhdr       = MHDR.from_bytes(byte_str[0])
-    if key
-      phypayload.macpayload = MACPayload.from_bytes(byte_str[1..-5], key, direction)
-    else
-      phypayload.macpayload = MACPayload.from_bytes(byte_str[1..-5])
-    end
-    phypayload.mic        = MIC.from_bytes(byte_str[-4..-1])
-    phypayload.direction  = direction
-
-    phypayload
+    phypayloed
   end
 end
+
+
+
+
+# ===============================================================--
+#  main
+
+appskey = ["01" * 16].pack('H*')
+nwkskey = ["01" * 16].pack('H*')
+
+
+phypayload = PHYPayload.new(
+  mhdr: MHDR.new(
+    mtype: MHDR::ConfirmedDataUp
+  ),
+  macpayload: MACPayload.new(
+    fhdr: FHDR.new(
+      devaddr: DevAddr.new(
+        nwkid:   0b1000000,
+        nwkaddr: 0b0_10000000_10000000_10001000
+      ),
+      fctrl: FCtrl.new(
+        adr: false,
+        adrackreq: false,
+	ack: false
+      ),
+      fcnt: 1,
+      fopts: nil
+    ),
+    fport: 1,
+    frmpayload: FRMPayload.new("\x01\x01\x01\x01\x01\x01\x01\x01")
+  ),
+  mic: '',
+  direction: :up
+)
+
+
+p phypayload.encode(appskey: appskey, nwkskey: nwkskey).to_hexstr
 
 
 phypayload = PHYPayload.new(
@@ -404,6 +339,9 @@ phypayload = PHYPayload.new(
   mic: '',
   direction: :up
 )
+
+# pp phypayload.encode(appkey: appskey).to_hexstr
+
 
 phypayload = PHYPayload.new(
   mhdr: MHDR.new(
@@ -426,9 +364,9 @@ phypayload = PHYPayload.new(
   direction: :up
 )
 
-appskey = ["01" * 16].pack('H*')
-nwkskey = ["02" * 16].pack('H*')
 
-pp phypayload.encode.to_hexstr
-pp phypayload.encode(appskey).to_hexstr
+#pp phypayload.encode.to_hexstr
+#pp phypayload.encode(appkey: appskey).to_hexstr
+
+
 

@@ -88,12 +88,6 @@ class String
     self.each_byte.map{|x| "%02x" % x}.join
   end
 
-  def xor(other)
-    self.each_byte.zip(other.each_byte)
-        .map{|a, b| a^b}
-        .pack('C*')
-  end
-
   def bound(len, pad = "\x0")
     next_bound = (self.length + (len-1)) / len  * len
     self + (pad * (next_bound - self.length))
