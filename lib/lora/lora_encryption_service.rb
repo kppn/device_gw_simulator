@@ -1,0 +1,173 @@
+require_relative 'lora_encryption'
+
+class LoRaDecryptionService
+  def initialize(bytes, direction, keys = {})
+    @bytes = bytes
+    @direction = direction
+    @appkey  = keys[:appkey]
+    @appskey = keys[:appskey]
+    @nwkskey = keys[:nwkskey]
+  end
+
+
+  def get_decrypted_phypayload
+    phypayload = PHYPayload.new
+
+    phypayload.mhdr       = MHDR.from_bytes(@bytes[0])
+
+    phypayload.macpayload, phypayload.mic = 
+      case phypayload.mhdr
+      when MHDR::JoinRequest
+        calc_decrypted_join_request_and_mic
+      when MHDR::JoinAccept
+        calc_decrypted_join_accept_and_mic
+      else
+        calc_decrypted_payload_and_mic
+      end
+
+    phypayload.direction = @direction
+
+    phypayload
+  end
+
+
+  private
+
+  def calc_decrypted_join_request_and_mic
+    join_request_payload = JoinRequestPayload.from_bytes(@bytes[1..-5])
+    mic = @bytes[-4..-1]
+
+    [join_request_payload, mic]
+  end
+
+
+  def calc_decrypted_join_accept_and_mic
+    dec_bytes = LoRaEncryption.encrypt_join_accept(@bytes[1..-1], @appkey)
+
+    join_accept_payload = JoinAcceptPayload.from_bytes(dec_bytes[1..-5])
+    mic = dec_bytes[-4..-1]
+
+    [join_accept_payload, mic]
+  end
+
+
+  def calc_decrypted_payload_and_mic
+    mic = @bytes[-4..-1]
+    macpayload = MACPayload.from_bytes(@bytes[1..-5])
+
+    macpayload.frmpayload = LoRaEncryption.encrypt_payload(
+                              macpayload.frmpayload,
+                              @appskey,
+                              @direction,
+                              macpayload.fhdr.devaddr,
+                              macpayload.fhdr.fcnt
+                            )
+    
+    [macpayload, mic]
+  end
+end
+
+
+
+
+class LoRaEncryptionService
+  def initialize(phypayload, keys = {})
+    @phypayload = phypayload
+    @appkey  = keys[:appkey]
+    @appskey = keys[:appskey]
+    @nwkskey = keys[:nwkskey]
+  end
+
+  def get_encrypted_payload_and_mic
+    case @phypayload.mhdr.mtype
+    when MHDR::JoinRequest
+      calc_encrypted_join_request_and_mic
+    when MHDR::JoinAccept
+      calc_encrypted_join_accept_and_mic
+    else
+      calc_encrypted_payload_and_mic
+    end
+  end
+
+
+  private
+
+  # Join Request
+  #   data = without encryption
+  #   MIC = aes128_cmac(AppKey, MHDR|AppEUI|DevEUI|DevNonce)[0..3]
+  def calc_encrypted_join_request_and_mic
+    data = [
+      @phypayload.mhdr,
+      @phypayload.macpayload
+    ].map(&:encode).join('')
+
+    mic = LoRaEncryption.calc_join_mic(data, @appkey)
+
+    [data, mic]
+  end
+
+
+  # Join Accept
+  #   MIC = aes128_cmac(AppKey, MHDR|AppNonce|NetID|DevAddr|DLSettings|RxDelay|CFList)[0..3]
+  #   data = aes128_decrypt(AppKey, AppNonce|NetID|DevAddr|DLSettings|RxDelay|CFList|MIC)
+  def calc_encrypted_join_accept_and_mic
+    mic_base = [
+      @phypayload.mhdr,
+      @phypayload.macpayload
+    ].map(&:encode).join('')
+    mic = LoRaEncryption.calc_join_mic(mic_base, @appkey)
+
+    enc_pay = LoRaEncryption.encrypt_join_accept(@phypayload.macpayload.encode + mic, @appkey)
+
+    data = [@phypayload.mhdr.encode, enc_pay].join('')
+
+    [data[0..-5], data[-4..-1]]
+  end
+
+
+  # DATA Payload
+  # enc
+  #   Ai = 0x01(1) | 0x00000000(4) | Dir(1) | DevAddr(4) | FCntUp/FCntDown(4) | 0x00(1) | i(1)
+  #   S = join( map(1..k)(aes128_encrypt(Key, Ai)) )
+  #   data = (pld | pad16) xor S
+  # mic
+  #   msg = MHDR | FHDR | FPort | FRMPayload
+  #   B0 = 0x49(1) | 0x00000000(4) | Dir(1) | DevAddr(4) | FCntUp/FCntDown(4) | 0x00(1) | len(msg)
+  #   MIC = aes128_cmac(NwkSKey, B0 | msg)[0..3]
+  def calc_encrypted_payload_and_mic
+    if @appskey.nil? || @nwkskey.nil?
+      raise ArgumentError.new('appskey and nwkskey must be specified')
+    end
+
+    p @phypayload.macpayload.frmpayload.encode.to_hexstr
+    p @appskey.to_hexstr
+    p @phypayload.macpayload.fhdr.devaddr.encode.to_hexstr
+    p @phypayload.macpayload.fhdr.fcnt
+
+    enc_pay = LoRaEncryption.encrypt_payload(
+                @phypayload.macpayload.frmpayload.encode,
+                @appskey,
+                @phypayload.direction,
+                @phypayload.macpayload.fhdr.devaddr.encode,
+                @phypayload.macpayload.fhdr.fcnt
+              )
+
+    data = [
+      @phypayload.mhdr.encode,
+      @phypayload.macpayload.fhdr.encode,
+      @phypayload.macpayload.instance_variable_get("@fport").encode,
+      enc_pay
+    ].join('')
+
+    mic = LoRaEncryption.calc_payload_mic(
+            data,
+            @nwkskey,
+            @phypayload.direction,
+            @phypayload.macpayload.fhdr.devaddr.encode,
+            @phypayload.macpayload.fhdr.fcnt
+          )
+
+    [data, mic]
+  end
+end
+
