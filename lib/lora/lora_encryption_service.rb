@@ -1,9 +1,8 @@
 require_relative 'lora_encryption'
 
 class LoRaDecryptionService
-  def initialize(bytes, direction, keys = {})
+  def initialize(bytes, keys = {})
     @bytes = bytes
-    @direction = direction
     @appkey  = keys[:appkey]
     @appskey = keys[:appskey]
     @nwkskey = keys[:nwkskey]
@@ -14,6 +13,7 @@ class LoRaDecryptionService
     phypayload = PHYPayload.new
 
     phypayload.mhdr       = MHDR.from_bytes(@bytes[0])
+    @direction  = phypayload.mhdr.up? ? :up : :down
 
     phypayload.macpayload, phypayload.mic = 
       case phypayload.mhdr
@@ -56,10 +56,10 @@ class LoRaDecryptionService
     macpayload = MACPayload.from_bytes(@bytes[1..-5])
 
     macpayload.frmpayload = LoRaEncryption.encrypt_payload(
-                              macpayload.frmpayload,
+                              macpayload.frmpayload.encode,
                               @appskey,
                               @direction,
-                              macpayload.fhdr.devaddr,
+                              macpayload.fhdr.devaddr.encode,
                               macpayload.fhdr.fcnt
                             )
     
@@ -138,11 +138,6 @@ class LoRaEncryptionService
     if @appskey.nil? || @nwkskey.nil?
       raise ArgumentError.new('appskey and nwkskey must be specified')
     end
-
-    p @phypayload.macpayload.frmpayload.encode.to_hexstr
-    p @appskey.to_hexstr
-    p @phypayload.macpayload.fhdr.devaddr.encode.to_hexstr
-    p @phypayload.macpayload.fhdr.fcnt
 
     enc_pay = LoRaEncryption.encrypt_payload(
                 @phypayload.macpayload.frmpayload.encode,

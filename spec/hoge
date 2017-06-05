@@ -1,0 +1,81 @@
+
+# ===============================================================--
+#  main
+
+appkey  = ["01" * 16].pack('H*')
+appskey = ["01" * 16].pack('H*')
+nwkskey = ["01" * 16].pack('H*')
+
+
+phypayload = PHYPayload.new(
+  mhdr: MHDR.new(
+    mtype: MHDR::ConfirmedDataUp
+  ),
+  macpayload: MACPayload.new(
+    fhdr: FHDR.new(
+      devaddr: DevAddr.new(
+        nwkid:   0b1000000,
+        nwkaddr: 0b0_10000000_10000000_10001000
+      ),
+      fctrl: FCtrl.new(
+        adr: false,
+        adrackreq: false,
+	ack: false
+      ),
+      fcnt: 1,
+      fopts: nil
+    ),
+    fport: 1,
+    frmpayload: FRMPayload.new("\x01\x01\x01\x01\x01\x01\x01\x01")
+  ),
+  mic: '',
+  direction: :up
+)
+
+
+# p phypayload.encode(appskey: appskey, nwkskey: nwkskey).to_hexstr
+
+
+phypayload = PHYPayload.new(
+  mhdr: MHDR.new(
+    mtype: MHDR::JoinRequest
+  ),
+  macpayload: JoinRequestPayload.new(
+    appeui: 'aaaaaaaa',
+    deveui: 'bbbbbbbb',
+    devnonce: 'aa'
+  ),
+  mic: '',
+  direction: :up
+)
+
+# pp phypayload.encode(appkey: appskey).to_hexstr
+
+
+phypayload = PHYPayload.new(
+  mhdr: MHDR.new(
+    mtype: MHDR::JoinAccept
+  ),
+  macpayload: JoinAcceptPayload.new(
+    appnonce: AppNonce.new(value: 0x010203),
+    netid:    NetId.new(
+                nwkid:   0b0001000,
+                addr:    0b0_00010001_00010010
+              ),
+    devaddr: DevAddr.new(
+               nwkid:   0b1000000,
+               nwkaddr: 0b0_10000001_10000010_10000011
+             ),
+    dlsettings: "\x00",
+    rxdelay: "\x00",
+  ),
+  mic: '',
+  direction: :up
+)
+
+
+#pp phypayload.encode.to_hexstr
+#pp phypayload.encode(appkey: appskey).to_hexstr
+
+
+

@@ -116,11 +116,13 @@ module Binary
     #       b = params[:b]
     #     end
     #   end
-    def define_option_params_initializer
+    def define_option_params_initializer(options = {})
       define_method(:initialize) do |init_params = {}|
         init_params.each do |name, val|
           self.send("#{name.to_s}=", val)
         end
+
+        instance_exec &options[:with] if options[:with]
       end
     end
 
@@ -343,7 +345,7 @@ module Binary
             value /= 256
             oct
           }.reverse
-          octs.pack('C*')
+          octs.pack('C*').force_encoding('ASCII-8BIT')
         }
       end
     end

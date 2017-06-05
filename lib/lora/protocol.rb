@@ -2,10 +2,6 @@ require_relative '../util/binary'
 require_relative 'lora_encryption'
 require_relative 'lora_encryption_service'
 
-require 'pp'
-require 'awesome_print'
-
-  
 class DevAddr
   include Binary
   
@@ -157,6 +153,15 @@ class MHDR
   def major
     0
   end
+
+  def up?
+    case mtype
+    when MHDR::JoinRequest, MHDR::UnconfirmedDataUp, MHDR::ConfirmedDataUp
+      true
+    else
+      false
+    end
+  end
 end
  
 
@@ -177,7 +182,6 @@ class MACPayload
     [fhdr.encode, @fport.encode, frmpayload_enc].join
   end
 
-  # a_params = direction
   def self.from_bytes(byte_str)
     macpayload = self.new
 
@@ -223,7 +227,7 @@ class JoinRequestPayload
 
     join_request_payload.appeui  = byte_str[0..7]
     join_request_payload.deveui  = byte_str[8..15]
-    join_request_payloaddevnonce = byte_str[9..-1]
+    join_request_payload.devnonce = byte_str[16..-1]
 
     join_request_payload
   end
@@ -265,10 +269,12 @@ class PHYPayload
   attr_accessor :direction
 
   wrapped_accessor({ mic: [MIC, :value] })
-  define_option_params_initializer
+  define_option_params_initializer with: ->{ set_direction }
 
 
   def encode(keys = {})
+    set_direction unless direction
+
     if keys.size == 0
       mhdr.encode + macpayload.encode
     else
@@ -280,93 +286,33 @@ class PHYPayload
   end
 
 
-  def self.from_bytes(byte_str, direction = :up, keys)
-    service = LoRaDecryptionService.new(byte_str, direction, keys)
-    phypayloed = service.get_decrypted_phypayload(bytes, direction, keys)
+  def self.from_bytes(byte_str, keys = {})
+    if keys.size == 0
+      phypayloed = self.new
+      phypayloed.mhdr = MHDR.from_bytes(byte_str[0])
 
-    phypayloed
+      phypayloed.macpayload = case phypayloed.mhdr.mtype
+                              when MHDR::JoinRequest
+                                JoinRequestPayload.from_bytes(byte_str[1..-1])
+                              when MHDR::JoinAccept
+                                JoinAcceptPayload.from_bytes(byte_str[1..-1])
+                              else
+                                MACPayload.from_bytes(byte_str[1..-1])
+                              end
+
+      phypayloed
+    else
+      service = LoRaDecryptionService.new(byte_str, keys)
+      phypayloed = service.get_decrypted_phypayload
+      phypayloed
+    end
+  end
+
+
+  def set_direction
+    if mhdr
+      direction = mhdr&.up? ? :up : :down
+    end
   end
 end
-
-
-
-
-# ===============================================================--
-#  main
-
-appskey = ["01" * 16].pack('H*')
-nwkskey = ["01" * 16].pack('H*')
-
-
-phypayload = PHYPayload.new(
-  mhdr: MHDR.new(
-    mtype: MHDR::ConfirmedDataUp
-  ),
-  macpayload: MACPayload.new(
-    fhdr: FHDR.new(
-      devaddr: DevAddr.new(
-        nwkid:   0b1000000,
-        nwkaddr: 0b0_10000000_10000000_10001000
-      ),
-      fctrl: FCtrl.new(
-        adr: false,
-        adrackreq: false,
-	ack: false
-      ),
-      fcnt: 1,
-      fopts: nil
-    ),
-    fport: 1,
-    frmpayload: FRMPayload.new("\x01\x01\x01\x01\x01\x01\x01\x01")
-  ),
-  mic: '',
-  direction: :up
-)
-
-
-p phypayload.encode(appskey: appskey, nwkskey: nwkskey).to_hexstr
-
-
-phypayload = PHYPayload.new(
-  mhdr: MHDR.new(
-    mtype: MHDR::JoinRequest
-  ),
-  macpayload: JoinRequestPayload.new(
-    appeui: 'aaaaaaaa',
-    deveui: 'bbbbbbbb',
-    devnonce: 'aa'
-  ),
-  mic: '',
-  direction: :up
-)
-
-# pp phypayload.encode(appkey: appskey).to_hexstr
-
-
-phypayload = PHYPayload.new(
-  mhdr: MHDR.new(
-    mtype: MHDR::JoinAccept
-  ),
-  macpayload: JoinAcceptPayload.new(
-    appnonce: AppNonce.new(value: 0x010203),
-    netid:    NetId.new(
-                nwkid:   0b0001000,
-                addr:    0b0_00010001_00010010
-              ),
-    devaddr: DevAddr.new(
-               nwkid:   0b1000000,
-               nwkaddr: 0b0_10000001_10000010_10000011
-             ),
-    dlsettings: "\x00",
-    rxdelay: "\x00",
-  ),
-  mic: '',
-  direction: :up
-)
-
-
-#pp phypayload.encode.to_hexstr
-#pp phypayload.encode(appkey: appskey).to_hexstr
-
-
 

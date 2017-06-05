@@ -44,7 +44,7 @@ class Integer
 end
 
 
-class Fixnum
+class Integer
   def bits(pos, value)
     case pos
     when Integer
