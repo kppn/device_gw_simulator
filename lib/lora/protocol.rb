@@ -310,9 +310,7 @@ class PHYPayload
 
 
   def set_direction
-    if mhdr
-      direction = mhdr&.up? ? :up : :down
-    end
+    self.direction = mhdr&.up? ? :up : :down
   end
 end
 

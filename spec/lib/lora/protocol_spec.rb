@@ -1,4 +1,4 @@
-require_relative '../lib/lora/protocol'
+require_relative '../../../lib/lora/protocol'
 
 describe 'encode' do
   let(:appkey)  { ["01" * 16].pack('H*') }
