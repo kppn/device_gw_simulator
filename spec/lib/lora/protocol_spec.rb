@@ -249,6 +249,78 @@ describe 'decode' do
       expect(phypayload.macpayload.devnonce).to eql ['2122'].pack('H*')
     end
   end
+
+
+  describe 'join accept' do
+    #  PHYPayload.new(
+    #    mhdr: MHDR.new(
+    #      mtype: MHDR::JoinAccept
+    #    ),
+    #    macpayload: JoinAcceptPayload.new(
+    #      appnonce: AppNonce.new(value: 0x010203),
+    #      netid:    NetId.new(
+    #                  nwkid:   0b1000000,
+    #                  addr:    0b0_10000001_10000010
+    #                ),
+    #      devaddr: DevAddr.new(
+    #                 nwkid:   0b1001000,
+    #                 nwkaddr: 0b0_10010001_10010010_10010011
+    #               ),
+    #      dlsettings: "\x01",
+    #      rxdelay: "\x02",
+    #    ),
+    #  )
+    let(:phypayload_encoded_without_encrypt) {
+      ['20030201828180939291900102'].pack('H*')
+    }
+    let(:phypayload_encoded_encrypt) {
+      ['2011573b4e5ad9a53120802e206a784364'].pack('H*')
+     }
+
+
+    it 'without encryption' do
+      phypayload = PHYPayload.from_bytes(phypayload_encoded_without_encrypt)
+
+      expect( phypayload.mhdr.class ).to eql MHDR
+      expect( phypayload.mhdr.mtype ).to eql MHDR::JoinAccept
+      expect( phypayload.mhdr.major ).to eql 0
+
+      expect( phypayload.macpayload.appnonce.value ).to eql 0x010203
+
+      expect( phypayload.macpayload.netid.nwkid ).to eql 0b1000000
+      expect( phypayload.macpayload.netid.addr ).to  eql 0b0_10000001_10000010
+
+      expect( phypayload.macpayload.devaddr.nwkid ).to   eql 0b1001000
+      expect( phypayload.macpayload.devaddr.nwkaddr ).to eql 0b0_10010001_10010010_10010011
+
+      expect( phypayload.macpayload.dlsettings ).to eql "\x01"
+      expect( phypayload.macpayload.rxdelay).to eql "\x02"
+
+      expect( phypayload.macpayload.cflist).to eql ""
+    end
+
+
+    it 'with encryption' do
+      phypayload = PHYPayload.from_bytes(phypayload_encoded_encrypt, appkey: appkey)
+
+      expect( phypayload.mhdr.class ).to eql MHDR
+      expect( phypayload.mhdr.mtype ).to eql MHDR::JoinAccept
+      expect( phypayload.mhdr.major ).to eql 0
+
+      expect( phypayload.macpayload.appnonce.value ).to eql 0x010203
+
+      expect( phypayload.macpayload.netid.nwkid ).to eql 0b1000000
+      expect( phypayload.macpayload.netid.addr ).to  eql 0b0_10000001_10000010
+
+      expect( phypayload.macpayload.devaddr.nwkid ).to   eql 0b1001000
+      expect( phypayload.macpayload.devaddr.nwkaddr ).to eql 0b0_10010001_10010010_10010011
+
+      expect( phypayload.macpayload.dlsettings ).to eql "\x01"
+      expect( phypayload.macpayload.rxdelay).to eql "\x02"
+
+      expect( phypayload.macpayload.cflist).to eql ""
+    end
+  end
 end
 
 

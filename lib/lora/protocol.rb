@@ -248,13 +248,13 @@ class JoinAcceptPayload
   def self.from_bytes(byte_str)
     join_accept_payload = self.new
 
-    join_accept_payload.appnonce   = byte_str[0..2]
-    join_accept_payload.netid      = NetId.from_bytes(byte_str[0..2])
-    join_accept_payload.devaddr    = DevAddr.from_bytes(byte_str[3..6])
-    join_accept_payload.dlsettings = byte_str[7]
-    join_accept_payload.rxdelay    = byte_str[8]
+    join_accept_payload.appnonce   = AppNonce.from_bytes(byte_str[0..2])
+    join_accept_payload.netid      = NetId.from_bytes(byte_str[3..5])
+    join_accept_payload.devaddr    = DevAddr.from_bytes(byte_str[6..9])
+    join_accept_payload.dlsettings = byte_str[10]
+    join_accept_payload.rxdelay    = byte_str[11]
     if byte_str.bytesize >= 9
-      join_accept_payload.cflist     = byte_str[9..-1]
+      join_accept_payload.cflist     = byte_str[12..-1]
     end
 
     join_accept_payload

@@ -19,8 +19,15 @@ class LoRaEncryption
 
   # encrypt Join Accept
   def self.encrypt_join_accept(data, key)
-    cipher = OpenSSL::Cipher.new("AES-128-ECB").decrypt
+    cipher = OpenSSL::Cipher.new("AES-128-ECB").decrypt # this is regal (not up side down). see spec
     cipher.padding = 0
+
+    encrypt(cipher, data, key)
+  end
+
+  # decrypt Join Accept
+  def self.decrypt_join_accept(data, key)
+    cipher = OpenSSL::Cipher.new("AES-128-ECB").encrypt # this is regal (not up side down). see spec
 
     encrypt(cipher, data, key)
   end

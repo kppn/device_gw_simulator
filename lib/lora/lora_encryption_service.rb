@@ -16,7 +16,7 @@ class LoRaDecryptionService
     @direction  = phypayload.mhdr.up? ? :up : :down
 
     phypayload.macpayload, phypayload.mic = 
-      case phypayload.mhdr
+      case phypayload.mhdr.mtype
       when MHDR::JoinRequest
         calc_decrypted_join_request_and_mic
       when MHDR::JoinAccept
@@ -42,9 +42,9 @@ class LoRaDecryptionService
 
 
   def calc_decrypted_join_accept_and_mic
-    dec_bytes = LoRaEncryption.encrypt_join_accept(@bytes[1..-1], @appkey)
+    dec_bytes = LoRaEncryption.decrypt_join_accept(@bytes[1..-1], @appkey)
 
-    join_accept_payload = JoinAcceptPayload.from_bytes(dec_bytes[1..-5])
+    join_accept_payload = JoinAcceptPayload.from_bytes(dec_bytes[0..-5])
     mic = dec_bytes[-4..-1]
 
     [join_accept_payload, mic]
