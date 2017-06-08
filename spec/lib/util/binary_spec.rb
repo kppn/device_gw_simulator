@@ -15,7 +15,7 @@ describe 'initializer ' do
   end
 
   it 'execute lamdba' do
-    expect( Hoge.new.instance_variable_get(:@inner_attr) ).should eql? 'setted'
+    expect( Hoge.new.instance_variable_get(:@inner_attr) ).to eql 'setted'
   end
 end
 
@@ -66,6 +66,7 @@ describe 'bit_structure' do
     end
   end
 
+
   describe 'const defined' do
     it 'include ElemX' do
       expect( Hoge.constants ).to include :Elem1
@@ -80,9 +81,9 @@ describe 'bit_structure' do
     }
 
     it 'attribute reader' do
-      expect( instance.a ).should eql? 1
-      expect( instance.b ).should eql? true
-      expect( instance.c ).should eql? Hoge::Elem1
+      expect( instance.a ).to eql 1
+      expect( instance.b ).to be true
+      expect( instance.c ).to eql Hoge::Elem1
     end
 
     it 'attribute writer' do
@@ -102,10 +103,10 @@ describe 'bit_structure' do
 
     it 'flag value 1/0 is changed as true/false' do
       instance.b = 1
-      expect( instance.b ).should eql? true
+      expect( instance.b ).to be true
 
       instance.b = 0
-      expect( instance.b ).should eql? false
+      expect( instance.b ).to be false
     end
   end
 
@@ -119,10 +120,24 @@ describe 'bit_structure' do
       )
     }
 
-    it 'encoding' do
-      p instance.encode
+    it 'encode' do
+      expect( instance.encode ).to eql "\x05\x02\x00\x00\x04"
     end
   end
 
+
+  describe 'decode' do
+    let(:bytes) {
+      "\x05\x02\x00\x00\x04"
+    }
+
+    it 'from_bytes' do
+      Hoge.from_bytes(bytes).tap do |instance|
+        expect( instance.a ).to eql 0b10_00000000_00000000_00000001
+        expect( instance.b ).to be true
+        expect( instance.c ).to eql Hoge::Elem1 
+      end
+    end
+  end
 end
 

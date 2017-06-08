@@ -175,9 +175,9 @@ describe 'decode' do
       expect(phypayload.macpayload.fhdr.devaddr.nwkaddr).to eql 0b0_10000001_10000010_10000011
 
       expect(phypayload.macpayload.fhdr.fctrl.class).to     eql FCtrl
-      expect(phypayload.macpayload.fhdr.fctrl.adr).to       eql false
-      expect(phypayload.macpayload.fhdr.fctrl.adrackreq).to eql false
-      expect(phypayload.macpayload.fhdr.fctrl.fpending).to  eql false
+      expect(phypayload.macpayload.fhdr.fctrl.adr).to       be false
+      expect(phypayload.macpayload.fhdr.fctrl.adrackreq).to be false
+      expect(phypayload.macpayload.fhdr.fctrl.fpending).to  be false
       expect(phypayload.macpayload.fhdr.fctrl.foptslen).to  eql 0
 
       expect(phypayload.macpayload.fhdr.fcnt).to   eql 258
