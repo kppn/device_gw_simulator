@@ -77,7 +77,12 @@ module Binary
     #       @hoge.value
     #     end
     #     def hoge=(v)
-    #       @hoge = Wrapper.new( {value : v} )
+    #       if v.kind_of? Integer || v.kind_of? String
+    #         @hoge ||= Wrapper.new
+    #         @hoge.value = v
+    #       elsif v.kind_of? Wrapper
+    #         @hoge = v
+    #       end
     #     end
     #   end
     #
@@ -87,19 +92,19 @@ module Binary
           # define getter
           define_method("#{attr}") do 
             instance_variable_get("@#{attr.to_s}")&.send(wrap_klass_attr)
-            #attr_value = instance_variable_get("@#{attr.to_s}")
-            #attr_value ? attr_value.send(wrap_klass_attr) : nil
           end
 
           # define setter
           define_method("#{attr}=") do |val|
             case val
-            when Integer
-              instance_variable_set("@#{attr.to_s}", wrap_klass.new( { wrap_klass_attr => val } ))
-            when String
-              instance_variable_set("@#{attr.to_s}", wrap_klass.new( { wrap_klass_attr => val } ))
             when wrap_klass
               instance_variable_set("@#{attr.to_s}", val)
+            else
+              attr_name = "@#{attr.to_s}"
+              unless instance_variable_get(attr_name)
+                instance_variable_set(attr_name, wrap_klass.new)
+              end
+              instance_variable_get(attr_name).send("#{wrap_klass_attr}=", val)
             end
           end
         end

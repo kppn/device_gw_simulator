@@ -20,6 +20,61 @@ describe 'initializer ' do
 end
 
 
+describe 'wrapper' do
+  before(:context) do
+    class Hoge
+      attr_accessor :hoge_attr
+    end
+
+    class Fuga
+      attr_accessor :fuga_attr
+    end
+
+    class Foo
+      include Binary
+
+      wrapped_accessor({
+        hoge: [Hoge, :hoge_attr],
+        fuga: [Fuga, :fuga_attr]
+      })
+    end
+  end
+
+  describe 'still wrapped value' do
+    let(:foo) {
+      foo = Foo.new
+      foo.hoge = Hoge.new.tap{|hoge| hoge.hoge_attr = 1}
+      foo
+    }
+
+    it 'setted as native' do
+      expect( foo.instance_variable_get("@hoge").class ).to eql Hoge
+      expect( foo.instance_variable_get("@hoge").hoge_attr ).to eql 1 
+    end
+  end
+
+  describe 'dynamic wrapped value' do
+    let(:foo) {
+      foo = Foo.new
+      foo.hoge = 1
+      foo.fuga = 'aaa'
+      foo
+    }
+
+    it 'accessed as raw but wrapped as Class' do
+      expect( foo.hoge ).to eql 1
+      expect( foo.instance_variable_get("@hoge").class ).to eql Hoge
+      expect( foo.instance_variable_get("@hoge").hoge_attr).to eql 1 
+      expect( foo.instance_variable_get("@hoge").hoge_attr.class).to eql Integer
+
+      expect( foo.fuga ).to eql 'aaa'
+      expect( foo.instance_variable_get("@fuga").class ).to eql Fuga
+      expect( foo.instance_variable_get("@fuga").fuga_attr).to eql 'aaa'
+      expect( foo.instance_variable_get("@fuga").fuga_attr.class).to eql String
+    end
+  end
+end
+
 
 
 describe 'bit_structure' do
