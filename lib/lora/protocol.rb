@@ -19,7 +19,18 @@ class AppNonce
   
   bit_structure [
     :little_endian,
-    [23..0, :value,   :numeric],
+    [23..0, :value,   :octets],
+  ]
+  define_option_params_initializer
+end
+
+
+class DevNonce
+  include Binary
+  
+  bit_structure [
+    :little_endian,
+    [15..0, :value,   :octets],
   ]
   define_option_params_initializer
 end
@@ -32,6 +43,18 @@ class NetId
     :little_endian,
     [23..17, :nwkid,   :numeric],
     [16..0,  :addr,    :numeric],
+  ]
+  define_option_params_initializer
+end
+
+
+class DLSettings
+  include Binary
+  
+  bit_structure [
+    [7,     :undefined],
+    [6..4,  :rx1droffset,   :numeric],
+    [3..0,  :rx2datarate,   :numeric],
   ]
   define_option_params_initializer
 end
@@ -69,7 +92,7 @@ class FOpts
   define_option_params_initializer
 
   def encode
-    self || ''
+    value || ''
   end
 
   def self.from_bytes(byte_str)
@@ -81,15 +104,15 @@ end
 class FHDR
   include Binary
   
-  attr_accessor :devaddr, :fctrl, :fopts
+  attr_accessor :devaddr, :fctrl
   wrapped_accessor({
-    fcnt:  [FCnt, :value],
-    fopts: [FOpts, :value]
+    fcnt:     [FCnt, :value],
+    fopts:    [FOpts, :value]
   })
   define_option_params_initializer
   
   def encode
-    [devaddr, fctrl, @fcnt, fopts].map(&:encode).join
+    [devaddr, fctrl, @fcnt, @fopts].map(&:encode).join
   end
 
   def self.from_bytes(byte_str)
@@ -202,7 +225,7 @@ class MIC
   define_option_params_initializer
 
   def encode
-    self || ''
+    value || ''
   end
 
   def self.from_bytes(byte_str)
@@ -211,38 +234,114 @@ class MIC
 end
 
 
+class EUI
+  include Binary
+
+  bit_structure [
+    :little_endian,
+    [63..0, :value, :octets]
+  ]
+  define_option_params_initializer
+end
+
+class AppEUI < EUI
+end
+
+class DevEUI < EUI
+end
+
+
 class JoinRequestPayload
   include Binary
 
-  attr_accessor :appeui, :deveui, :devnonce
-
+  wrapped_accessor({
+    appeui: [AppEUI, :value],
+    deveui: [DevEUI, :value],
+    devnonce: [DevNonce, :value]
+  })
   define_option_params_initializer
 
   def encode
-    [appeui, deveui, devnonce].join('')
+    [@appeui, @deveui, @devnonce].map(&:encode).join('')
   end
 
   def self.from_bytes(byte_str)
     join_request_payload = self.new
 
-    join_request_payload.appeui  = byte_str[0..7]
-    join_request_payload.deveui  = byte_str[8..15]
-    join_request_payload.devnonce = byte_str[16..-1]
+    join_request_payload.appeui   = AppEUI.from_bytes(byte_str[0..7])
+    join_request_payload.deveui   = DevEUI.from_bytes(byte_str[8..15])
+    join_request_payload.devnonce = DevNonce.from_bytes(byte_str[16..-1])
 
     join_request_payload
   end
 end
 
 
-class JoinAcceptPayload
+class ChannelFrequency
+  include Binary
+  
+  bit_structure [
+    [23..0, :value,   :numeric, factor: 100],    # The actual in Hz is *100
+  ]
+  define_option_params_initializer
+end
+
+
+class CFList
   include Binary
 
-  attr_accessor :appnonce, :netid, :devaddr, :dlsettings, :rxdelay, :cflist
-
+  wrapped_accessor({
+    ch3: [ChannelFrequency, :value],
+    ch4: [ChannelFrequency, :value],
+    ch5: [ChannelFrequency, :value],
+    ch6: [ChannelFrequency, :value],
+    ch7: [ChannelFrequency, :value],
+  })
   define_option_params_initializer
 
   def encode
-    [appnonce, netid, devaddr, dlsettings, rxdelay, cflist].map(&:encode).join('')
+    [@ch3, @ch4, @ch5, @ch6, @ch7].map(&:encode).join + "\x0" # 1Byte zero as RFU
+  end
+
+  def self.from_bytes(byte_str)
+    cflist = self.new
+    cflist.ch3 = ChannelFrequency.from_bytes(byte_str[0..2])
+    cflist.ch4 = ChannelFrequency.from_bytes(byte_str[3..5])
+    cflist.ch5 = ChannelFrequency.from_bytes(byte_str[6..8])
+    cflist.ch6 = ChannelFrequency.from_bytes(byte_str[9..11])
+    cflist.ch7 = ChannelFrequency.from_bytes(byte_str[12..14])
+    cflist
+  end
+end
+
+
+class Delay
+  include Binary
+
+  bit_structure [
+    [7..4, :undefined],
+    [3..0, :value,   :numeric]
+  ]
+  define_option_params_initializer
+end
+
+
+class RXDelay < Delay
+end
+
+
+class JoinAcceptPayload
+  include Binary
+
+  attr_accessor :netid, :devaddr, :dlsettings, :cflist
+  wrapped_accessor({
+    appnonce: [AppNonce, :value],
+    rxdelay:  [Delay, :value]
+  })
+  define_option_params_initializer
+
+  def encode
+    [@appnonce, netid, devaddr, dlsettings, @rxdelay, cflist].map(&:encode).join('')
   end
 
   def self.from_bytes(byte_str)
@@ -251,10 +350,10 @@ class JoinAcceptPayload
     join_accept_payload.appnonce   = AppNonce.from_bytes(byte_str[0..2])
     join_accept_payload.netid      = NetId.from_bytes(byte_str[3..5])
     join_accept_payload.devaddr    = DevAddr.from_bytes(byte_str[6..9])
-    join_accept_payload.dlsettings = byte_str[10]
-    join_accept_payload.rxdelay    = byte_str[11]
-    if byte_str.bytesize >= 9
-      join_accept_payload.cflist     = byte_str[12..-1]
+    join_accept_payload.dlsettings = DLSettings.from_bytes(byte_str[10])
+    join_accept_payload.rxdelay    = RXDelay.from_bytes(byte_str[11])
+    if byte_str.bytesize > 12
+      join_accept_payload.cflist     = CFList.from_bytes(byte_str[12..27])
     end
 
     join_accept_payload
@@ -265,6 +364,7 @@ end
 class PHYPayload
   include Binary
 
+  attr_accessor :raw, :raw_encrypted
   attr_accessor :mhdr, :macpayload
   attr_accessor :direction
 
@@ -276,12 +376,11 @@ class PHYPayload
     set_direction unless direction
 
     if keys.size == 0
-      mhdr.encode + macpayload.encode
+      self.raw = mhdr.encode + macpayload.encode
     else
       service = LoRaEncryptionService.new(self, keys)
       data, @mic = service.get_encrypted_payload_and_mic
-
-      data + @mic
+      selfraw_encrypted = data + @mic
     end
   end
 
@@ -300,11 +399,14 @@ class PHYPayload
                                 MACPayload.from_bytes(byte_str[1..-1])
                               end
 
+      phypayloed.raw = byte_str
       phypayloed
     else
       service = LoRaDecryptionService.new(byte_str, keys)
-      phypayloed = service.get_decrypted_phypayload
-      phypayloed
+      phypayload = service.get_decrypted_phypayload
+      phypayload.raw = phypayload.encode
+      phypayload.raw_encrypted = byte_str
+      phypayload
     end
   end
 

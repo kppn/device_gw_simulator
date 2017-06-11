@@ -9,6 +9,9 @@ describe 'initializer ' do
       define_option_params_initializer with: ->{ @inner_attr = 'setted' }
     end
   end
+  after(:context) do
+    Object.send(:remove_const, :Hoge)
+  end
 
   it 'can take parameters(Hash)' do
     expect{ Hoge.new(a: 1, b: 2, c: 3) }.not_to raise_error
@@ -38,6 +41,11 @@ describe 'wrapper' do
         fuga: [Fuga, :fuga_attr]
       })
     end
+  end
+  after(:context) do
+    Object.send(:remove_const, :Hoge)
+    Object.send(:remove_const, :Fuga)
+    Object.send(:remove_const, :Foo)
   end
 
   describe 'still wrapped value' do
@@ -92,6 +100,9 @@ describe 'bit_structure' do
       ]
       define_option_params_initializer with: ->{ @inner_attr = 'setted' }
     end
+  end
+  after(:context) do
+    Object.send(:remove_const, :Hoge)
   end
 
 
@@ -195,4 +206,102 @@ describe 'bit_structure' do
     end
   end
 end
+
+
+describe 'wrapper binary octets' do
+  before(:context) do
+    class Hoge
+      include Binary
+
+      bit_structure [
+        :little_endian,
+        [63..0, :hoge_attr, :octets]
+      ]
+    end
+
+    class Foo
+      include Binary
+
+      wrapped_accessor({
+        hoge: [Hoge, :hoge_attr],
+      })
+    end
+  end
+  after(:context) do
+    Object.send(:remove_const, :Hoge)
+    Object.send(:remove_const, :Foo)
+  end
+
+  describe 'octets' do
+    let(:hoge) {
+      hoge = Hoge.new
+      hoge.hoge_attr = ["0001020304050607"].pack('H*')
+      hoge
+    }
+
+    it 'encode' do
+      expect( hoge.encode ).to eql ["0706050403020100"].pack('H*')
+    end
+
+  end
+
+  describe 'still wrapped value' do
+    let(:foo) {
+      foo = Foo.new
+      foo.hoge = Hoge.new.tap{|hoge| hoge.hoge_attr = ["0001020304050607"].pack('H*')}
+      foo
+    }
+
+    it 'setted as native' do
+      expect( foo.instance_variable_get("@hoge").class ).to eql Hoge
+      expect( foo.instance_variable_get("@hoge").hoge_attr ).to eql ["0001020304050607"].pack('H*')
+    end
+  end
+end
+
+
+describe 'mix binary octets and other' do
+  before(:context) do
+    class Hoge
+      include Binary
+
+      bit_structure [
+        [3..0,   :hoge_attr1, :numeric],
+        [7..4,   :hoge_attr2, :numeric],
+        [23..8,  :hoge_attr3, :octets],
+        [31..24, :hoge_attr4, :octets],
+        [39..32, :hoge_attr5, :numeric],
+      ]
+    end
+  end
+  after(:context) do
+    Object.send(:remove_const, :Hoge)
+  end
+
+  describe 'octets' do
+    let(:hoge) {
+      hoge = Hoge.new
+      hoge.hoge_attr1 = 0x5
+      hoge.hoge_attr2 = 0xa
+      hoge.hoge_attr3 = ["0102"].pack('H*')
+      hoge.hoge_attr4 = ["11"].pack('H*')
+      hoge.hoge_attr5 = 0xf
+      hoge
+    }
+
+    it 'access' do
+      expect( hoge.hoge_attr1 ).to eql 0x5
+      expect( hoge.hoge_attr2 ).to eql 0xa
+      expect( hoge.hoge_attr3 ).to eql ["0102"].pack('H*')
+      expect( hoge.hoge_attr4 ).to eql ["11"].pack('H*')
+      expect( hoge.hoge_attr5 ).to eql 0xf
+    end
+
+    it 'encode' do
+      expect( hoge.encode ).to eql ["a50102110f"].pack('H*')
+    end
+  end
+end
+
+
 

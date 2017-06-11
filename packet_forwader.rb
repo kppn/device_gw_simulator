@@ -85,6 +85,7 @@ def data_msg(data, freq)
         "codr": "4/5",
         "rssi": -40,
         "lsnr": 2.0,
+        "lsnr": 2.0,
         "size": data.length,
         "data": Base64.encode64(data)
         #"data": "QFIWBCYAAAABYeeo6Lm9yLWh"
@@ -106,8 +107,8 @@ phypayload = PHYPayload.new(
     fhdr: FHDR.new(
       devaddr: DevAddr.new(
         # 0x26041652
-        nwkid:   0b0010_011,
-        nwkaddr: 0b0_0000_0100_0001_0110_0101_0010
+        nwkid:   3,
+        nwkaddr: 31992066
       ),
       fctrl: FCtrl.new(
         adr:        false,
@@ -126,12 +127,29 @@ phypayload = PHYPayload.new(
   direction: :up
 )
 
+
+joinrequest = PHYPayload.new(
+  mhdr: MHDR.new(
+    mtype: MHDR::JoinRequest
+  ),
+  macpayload: JoinRequestPayload.new(
+    appeui: ["70b3d57ef0004409"].pack('H*'),
+    deveui: ["005d8c57405e7f93"].pack('H*'),
+    devnonce: "\x21\x22"
+  )
+)
+# 00 70b3d57ef0004409 005d8c57405e7f93 2122
+# 00 70b3d57ef0004409 005d8c57405e7f93 2122 5cd03ec7
+
+
+
+
+appkey  = ["A7CF342AC4C83EE14C73B824E480FC85"].pack('H*')
 appskey = ["7BF7C495B7C12A92CB856B35FCD18598"].pack('H*')
 nwkskey = ["AF0196F6C67B5B65D20B925BCF010290"].pack('H*')
 
 #host = "bridge.asia-se.thethings.network"   # TTN
 host = "150.95.134.143"                     # Conoha
-
 
 
 server = UDPSocket.new.tap{|s| s.connect(host, 1700)}
@@ -153,33 +171,41 @@ stat_thread = Thread.new do
 end
 
 data_thread = Thread.new do
-    en_freq = Enumerator.new do |y|
-      [
-    	922.102000,
-    	922.112000,
-    	922.122000,
-    	922.132000,
-    	922.142000,
-    	922.152000,
-    	922.162000,
-      ].cycle do |freq|
-        y << freq
-      end
+  en_freq = Enumerator.new do |y|
+    [
+    922.102000,
+    922.112000,
+    922.122000,
+    922.132000,
+    922.142000,
+    922.152000,
+    922.162000,
+    ].cycle do |freq|
+      y << freq
     end
+  end
 
-  loop do
-    phypayload.macpayload.fhdr.fcnt = phypayload.macpayload.fhdr.fcnt + 1
-    #phypayload.macpayload.frmpayload = FRMPayload.new("hello#{phypayload.macpayload.fhdr.fcnt}")
-    #lora_data = phypayload.encode(appskey, nwkskey)
-    lora_data = phypayload.encode(nwkskey, nwkskey)
+  begin
+    loop do
+      phypayload.macpayload.fhdr.fcnt = phypayload.macpayload.fhdr.fcnt + 1
+      phypayload.macpayload.frmpayload = FRMPayload.new("hello#{phypayload.macpayload.fhdr.fcnt}")
+      lora_data = phypayload.encode(appskey: appskey, nwkskey: nwkskey)
+      
+      #lora_data = phypayload.encode(nwkskey, nwkskey)
+      
+      #lora_data = joinrequest.encode(appkey: appkey)
 
-    freq = en_freq.next
+      freq = en_freq.next
 
-    data = head(:data) + data_msg(lora_data, en_freq.next)
+      data = head(:data) + data_msg(lora_data, en_freq.next)
 
-    server.send data, 0, nil
-    puts "send data. LORA PHYPayload: #{lora_data.to_hexstr}"
-    sleep 10
+      server.send data, 0, nil
+      puts "send data. LORA PHYPayload: #{lora_data.to_hexstr}"
+      sleep 10
+    end
+  rescue => e
+    p e
+    exit
   end
 end
 
@@ -189,7 +215,7 @@ pull_thread = Thread.new do
 
     server.send data, 0, nil
     puts "send pull. PF Head: #{data.to_hexstr}"
-    sleep 111
+    sleep 11
   end
 end
 

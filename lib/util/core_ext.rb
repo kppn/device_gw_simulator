@@ -92,5 +92,15 @@ class String
     next_bound = (self.length + (len-1)) / len  * len
     self + (pad * (next_bound - self.length))
   end
+
+  def byte_split(n)
+    s = self.force_encoding('ASCII-8BIT')
+    a = []
+    (0...s.bytesize).step(n).each do |i|
+      a << s[i, n]
+    end
+    a
+  end
 end
+
 

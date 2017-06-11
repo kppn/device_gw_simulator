@@ -11,7 +11,7 @@ class LoRaEncryption
 
     cipher = OpenSSL::Cipher.new("AES-128-CBC").encrypt
 
-    enc_data = data.bound(16).scan(/.{16}/)
+    enc_data = data.bound(16).byte_split(16)
                    .map.with_index{|d, i| xor(d, encrypt(cipher, a + (i+1).pack8, key))}
                    .join
     enc_data[0...data.length]
@@ -47,7 +47,7 @@ class LoRaEncryption
   def self.encrypt(cipher, data, key)
     cipher.key = key
 
-    data.bound(16).scan(/.{16}/)
+    data.bound(16).byte_split(16)
         .map{|block| cipher.update(block)}
         .join
   end

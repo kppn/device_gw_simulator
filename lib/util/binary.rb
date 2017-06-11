@@ -22,6 +22,10 @@ module Binary
     #       * attr=(val)             # val
     #       * enum_name?             #=> true / false
     #       * decode_attr(byte_str)  # e.g.) "\x01\x02"
+    #   type octets
+    #       * attr                   #=> value
+    #       * attr=(val)             # val
+    #       * decode_attr(byte_str)  # raw val e.g.) "\x01\x02"
     #
     # Type enum defines constants for the class, like
     # EnumName. if no enumerated value is specified,
@@ -45,6 +49,8 @@ module Binary
           define_numeric_methods name, params
         when :enum
           define_enum_methods name, params
+        when :octets
+          define_octets_methods name, params
         else
           raise ArgumentError.new("bit structure #{name}. type must be :flag or :numeric pr :enum")
         end
@@ -142,24 +148,42 @@ module Binary
 
     # form_definitions
     #  bit_structure [
-    #    [7,    :hoge,  :flag],
-    #    [2..0, :foo,   :enum, {
-    #                      e_foo0: :e_foo_value0
-    #                      e_foo1: :e_foo_value1
-    #                    }
-    #    ],
+    #    [15..8,  :hoge       :numeric, factor: 100],
+    #    [7,      :fuga,      :flag],
+    #    [3..6],  :undefined],
+    #    [2..0,   :foo,       :enum, {
+    #                           e_foo0: :e_foo_value0
+    #                           e_foo1: :e_foo_value1
+    #                         } ],
     #  ]
     #  =>
     #  {
-    #    hoge: {
-    #      {pos: 7..7, type: :flag,    opt: nil}
-    #    },
     #    foo: {
-    #      {pos: 0..2, type: :enum,    opt: {e_foo0: :e_foo_value0, e_foo1: :e_foo_value1}}
+    #      pos: 0..2, type: :enum,    opt: {e_foo0: :e_foo_value0, e_foo1: :e_foo_value1}
+    #    },
+    #    fuga: {
+    #      pos: 7..7, type: :flag,    opt: nil
+    #    },
+    #    hoge: {
+    #      pos: 8..15, type: :numeric, opt: {factor: 100}
     #    }
     #  }
     def form_definitions(defs)
       hash = {}
+
+      form_positions!(defs)
+
+      defs.sort_by{|d|
+        d[0].first
+      }.each{|d|
+        range, attr_name, type, opt = *d
+        hash[attr_name] = { pos: range, type: type, opt: opt }
+      }
+
+      hash
+    end
+
+    def form_positions!(defs)
       defs.each do |d|
         r = case d[0]
             when Integer
@@ -167,10 +191,8 @@ module Binary
             when Range
               Range.new(* [d[0].first, d[0].last].sort)
             end
-        hash[d[1]] = { pos: r, type: d[2], opt: d[3] }
+        d[0] = r
       end
-
-      hash
     end
 
     def byte_width(defs)
@@ -179,6 +201,14 @@ module Binary
     end
 
     def define_attr_decode_method(name, params)
+      if params[:type] == :octets
+        define_attr_decode_octets_method name, params
+      else
+        define_attr_decode_numeric_flag_enum_method name, params
+      end
+    end
+
+    def define_attr_decode_numeric_flag_enum_method(name, params)
       shift_width = params[:pos].first
       mask        = (1 << params[:pos].size) - 1
 
@@ -188,14 +218,28 @@ module Binary
         bytes = byte_str.each_byte.to_a[0..width]
         bytes.inject(0){|s, x| s * 256 + x}
       }
+      factor = if params[:type] == :numeric && params[:opt] && params[:opt][:factor]
+                 params[:opt][:factor]
+               end
 
       define_method("decode_#{name}") do |byte_str|
         raw_num = unpack_to_int.call(byte_str)
         num = (raw_num >> shift_width) & mask
+        num *= factor if factor
         self.send("#{name}=", num)
       end
     end
 
+    def define_attr_decode_octets_method(name, params)
+      unpack_to_string = Proc.new {|byte_str|
+        self::Endian == :little_endian ? byte_str.reverse : byte_str
+      }
+
+      define_method("decode_#{name}") do |byte_str|
+        unpacked = unpack_to_string.call(byte_str)
+        self.send("#{name}=", unpacked)
+      end
+    end
 
     # setter:  obj.a_flag = true
     #          obj.a_flag = 1
@@ -215,13 +259,13 @@ module Binary
     # getter:  obj.a_value     #=> 3
     def define_numeric_methods(name, params)
       define_basic_getter name
-      define_basic_setter name, params
+      define_numeric_setter name, params
     end
 
 
-    # setter:  obj.a_value          #=> true
-    # getter:  obj.a_value = true
-    # boolean: obj.a_value?         #=> true
+    # setter:  obj.a_value = ObjKlass::EnumValueA
+    # getter:  obj.a_value          #=> 1
+    # boolean: obj.enum_value_a?    #=> true
     def define_enum_methods(name, params)
       define_basic_getter name
       define_enum_setter name, params
@@ -229,6 +273,12 @@ module Binary
       define_enum_constants name, params
     end
 
+    # setter:  obj.a_value = "\x01\x02"
+    # getter:  obj.a_value            #=> "\x01\x02"
+    def define_octets_methods(name, params)
+      define_basic_getter name
+      define_octets_setter name, params
+    end
 
     def define_basic_getter(name)
       define_method(name) do
@@ -236,9 +286,9 @@ module Binary
       end
     end
 
-    def define_basic_setter(name, params)
+    def define_numeric_setter(name, params)
       define_method("#{name.to_s}=") do |val|
-        unless valid_range_value?(val, params[:pos])
+        unless valid_numeric_range_value?(val, params)
           raise ArgumentError.new("#{name} = #{val} for bit #{params[:pos]} overflow")
         end
         instance_variable_set("@#{name}", val)
@@ -281,6 +331,15 @@ module Binary
         const_set(camel_name, enum_value)
       end
     end
+
+    def define_octets_setter(name, params)
+      define_method("#{name.to_s}=") do |val|
+        unless valid_octets_range_value?(val, params)
+          raise ArgumentError.new("#{name} = #{val} for bit #{params[:pos]} overflow")
+        end
+        instance_variable_set("@#{name}", val)
+      end
+    end
   end
 
 
@@ -308,26 +367,66 @@ module Binary
         self
       end
 
+
       def encode
-        value = 0
-        self.class::Defs.each do |name, params|
-          next if name.to_s == 'undefined'
-
-          val = self.send(name)
-          shift_width = params[:pos].first
-          mask = (1 << params[:pos].size) - 1
-          bit_oriented_value = (val.to_i & mask) << shift_width
-          value |= bit_oriented_value
-        end
-
-        pack = make_pack(self.class::ByteWidth)
-        packed = pack.call(value)
-
-        self.class::Endian == :little_endian ?  packed.reverse : packed
+        gdefs = group_def_types(self.class::Defs)
+        gdefs.map{|group|
+          if group.first[1][:type] == :octets
+            pack_octets(group)
+          else
+            pack_numerics(group)
+          end
+        }.join('')
       end
 
 
       private
+
+      def pack_octets(defs)
+        packed = defs.map{|(name, _)|
+                   self.send(name)
+                 }.join.force_encoding('ASCII-8BIT')
+
+        self.class::Endian == :little_endian ?  packed.reverse : packed
+      end
+
+      def pack_numerics(defs)
+        value = 0
+        shift_base = defs.first[1][:pos].first  # retrieve bit position of first attribute
+        defs.each do |name, params|
+          next if name.to_s == 'undefined'
+
+          val = self.send(name)
+          val = ajust_when_encode(val, params)
+
+          mask = (1 << params[:pos].size) - 1
+          shift_width = params[:pos].first - shift_base
+
+          value |= ( (val.to_i & mask) << shift_width )
+        end
+
+        packed = make_pack(defs).call(value)
+
+        self.class::Endian == :little_endian ?  packed.reverse : packed
+      end
+
+      def group_def_types(defs)
+        #  {
+        #    a: { pos: 3..0,   type: :flag },
+        #    b: { pos: 7..4,   type: :numeric },
+        #    c: { pos: 31..8,  type: :octets }
+        #    d: { pos: 39..31, type: :numeric}
+        #  }
+        # =>
+        #  [
+        #    { a: { pos: 3..0,   type: :flag }, b: { pos: 7..4,   type: :numeric } },
+        #    { c: { pos: 31..8,  type: :octets } },
+        #    { d: { pos: 39..31, type: :numeric} }
+        #  ]
+        defs.to_a.slice_when {|a, b|
+          a[1][:type] == :octets || b[1][:type] == :octets
+        }.map{|a| a.to_h}
+      end
 
       def form_flag_value(val)
         unless [0, 1, true, false].include?(val)
@@ -339,11 +438,23 @@ module Binary
         val
       end
 
-      def valid_range_value?(val, pos)
-        val >= 0 && val.bit_length <= pos.size
+      def valid_numeric_range_value?(val, params)
+        factor = if params[:opt] && params[:opt][:factor]
+                   params[:opt][:factor]
+                 end
+        v = factor ? (val / factor) : val
+        v >= 0 && v.bit_length <= params[:pos].size
       end
 
-      def make_pack(width)
+      def valid_octets_range_value?(val, params)
+        val.bytesize == params[:pos].size / 8
+      end
+
+      def make_pack(defs)
+        lsb = defs.map{|_, params| params[:pos].first}.min
+        msb = defs.map{|_, params| params[:pos].last}.max
+        width = ((msb+1-lsb)+7) / 8
+
         Proc.new{|value|
           octs = width.times.map{
             oct = value % 256
@@ -353,7 +464,21 @@ module Binary
           octs.pack('C*').force_encoding('ASCII-8BIT')
         }
       end
+
+      def ajust_when_encode(val, params)
+        case params[:type]
+        when :numeric
+          if params[:opt] && params[:opt][:factor]
+            val / params[:opt][:factor]
+          else
+            val
+          end
+        else
+          val
+        end
+      end
     end
+
   end
 
 end
