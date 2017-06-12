@@ -166,3 +166,36 @@ class LoRaEncryptionService
   end
 end
 
+
+class KeyGenerator
+  def initialize(join_request_phypayload, join_accept_phypayload, appkey)
+    @join_request_phypayload = join_request_phypayload
+    @join_accept_phypayload = join_accept_phypayload
+    @appkey = appkey
+  end
+
+  def get_keys
+    [get_nwkskey, get_appskey]
+  end
+
+  def get_nwkskey
+    base = "\x01" + base_common
+    LoRaEncryption.encrypt_aes(base, @appkey)
+  end
+
+  def get_appskey
+    base = "\x02" + base_common
+    LoRaEncryption.encrypt_aes(base, @appkey)
+  end
+
+  private
+
+  def base_common
+    [
+      @join_accept_phypayload.macpayload.instance_variable_get('@appnonce').encode +
+      @join_accept_phypayload.macpayload.netid.encode +
+      @join_request_phypayload.macpayload.instance_variable_get('@devnonce').encode
+    ].join
+  end
+end
+

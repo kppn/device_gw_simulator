@@ -69,7 +69,6 @@ describe 'PHYPayload' do
             devnonce: "\x21\x22"
           ),
           mic: '',
-          direction: :up
         )
       }
 
@@ -88,7 +87,7 @@ describe 'PHYPayload' do
             mtype: MHDR::JoinAccept
           ),
           macpayload: JoinAcceptPayload.new(
-            appnonce: "\x01\x02\x03",
+            appnonce: AppNonce.new(value: "\x01\x02\x03"),
             netid: NetId.new(
               nwkid:   0b1000000,
               addr:    0b0_10000001_10000010
@@ -103,6 +102,11 @@ describe 'PHYPayload' do
             ),
             rxdelay: 2,
             cflist: CFList.new(
+              #ch3: ChannelFrequency.new(value: 923_200_000),
+              #ch4: ChannelFrequency.new(value: 923_400_000),
+              #ch5: ChannelFrequency.new(value: 923_600_000),
+              #ch6: ChannelFrequency.new(value: 923_800_000),
+              #ch7: ChannelFrequency.new(value: 924_000_000),
               ch3: 923_200_000,
               ch4: 923_400_000,
               ch5: 923_600_000,
@@ -245,7 +249,6 @@ describe 'PHYPayload' do
       #      devnonce: "\x21\x22"
       #    ),
       #    mic: '',
-      #    direction: :up
       #  )
       let(:phypayload_encoded_without_encrypt) {
         ['00080706050403020118171615141312112221'].pack('H*')
@@ -259,9 +262,9 @@ describe 'PHYPayload' do
         expect(phypayload.mhdr.major).to eql 0
 
         expect(phypayload.macpayload.class).to    eql JoinRequestPayload
-        expect(phypayload.macpayload.appeui).to   eql ['0102030405060708'].pack('H*')
-        expect(phypayload.macpayload.deveui).to   eql ['1112131415161718'].pack('H*')
-        expect(phypayload.macpayload.devnonce).to eql ['2122'].pack('H*')
+        expect(phypayload.macpayload.appeui ).to   eql ['0102030405060708'].pack('H*')
+        expect(phypayload.macpayload.deveui ).to   eql ['1112131415161718'].pack('H*')
+        expect(phypayload.macpayload.devnonce ).to eql ['2122'].pack('H*')
       end
     end
 
@@ -319,7 +322,9 @@ describe 'PHYPayload' do
         expect( phypayload.macpayload.devaddr.nwkid ).to   eql 0b1001000
         expect( phypayload.macpayload.devaddr.nwkaddr ).to eql 0b0_10010001_10010010_10010011
 
-        expect( phypayload.macpayload.dlsettings ).to eql "\x01"
+        expect( phypayload.macpayload.dlsettings.rx1droffset ).to eql 0
+        expect( phypayload.macpayload.dlsettings.rx2datarate ).to eql 1
+
         expect( phypayload.macpayload.rxdelay ).to eql 2
 
         expect( phypayload.macpayload.cflist ).not_to eql nil
@@ -343,7 +348,9 @@ describe 'PHYPayload' do
         expect( phypayload.macpayload.devaddr.nwkid ).to   eql 0b1001000
         expect( phypayload.macpayload.devaddr.nwkaddr ).to eql 0b0_10010001_10010010_10010011
 
-        expect( phypayload.macpayload.dlsettings ).to eql "\x01"
+        expect( phypayload.macpayload.dlsettings.rx1droffset ).to eql 0
+        expect( phypayload.macpayload.dlsettings.rx2datarate ).to eql 1
+
         expect( phypayload.macpayload.rxdelay).to eql 2
 
         expect( phypayload.macpayload.cflist ).not_to eql nil
@@ -389,11 +396,11 @@ describe 'CFList' do
   describe 'encode/decode' do
     let(:cflist) {
       CFList.new(
-        ch3: 923_200_000,
-        ch4: 923_400_000,
-        ch5: 923_600_000,
-        ch6: 923_800_000,
-        ch7: 924_000_000,
+        ch3: ChannelFrequency.new(value: 923_200_000),
+        ch4: ChannelFrequency.new(value: 923_400_000),
+        ch5: ChannelFrequency.new(value: 923_600_000),
+        ch6: ChannelFrequency.new(value: 923_800_000),
+        ch7: ChannelFrequency.new(value: 924_000_000),
       )
     }
 

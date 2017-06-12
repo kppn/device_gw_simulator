@@ -244,8 +244,10 @@ class EUI
   define_option_params_initializer
 end
 
+
 class AppEUI < EUI
 end
+
 
 class DevEUI < EUI
 end

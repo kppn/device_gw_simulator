@@ -17,6 +17,13 @@ class LoRaEncryption
     enc_data[0...data.length]
   end
 
+  def self.encrypt_aes(data, key)
+    cipher = OpenSSL::Cipher.new("AES-128-CBC").encrypt
+
+    enc_data = encrypt(cipher, data, key)
+    enc_data
+  end
+
   # encrypt Join Accept
   def self.encrypt_join_accept(data, key)
     cipher = OpenSSL::Cipher.new("AES-128-ECB").decrypt # this is regal (not up side down). see spec
