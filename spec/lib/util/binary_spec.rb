@@ -266,11 +266,11 @@ describe 'mix binary octets and other' do
       include Binary
 
       bit_structure [
-        [3..0,   :hoge_attr1, :numeric],
-        [7..4,   :hoge_attr2, :numeric],
-        [23..8,  :hoge_attr3, :octets],
-        [31..24, :hoge_attr4, :octets],
         [39..32, :hoge_attr5, :numeric],
+        [31..24, :hoge_attr4, :octets],
+        [23..8,  :hoge_attr3, :octets],
+        [7..4,   :hoge_attr2, :numeric],
+        [3..0,   :hoge_attr1, :numeric],
       ]
     end
   end
@@ -298,7 +298,16 @@ describe 'mix binary octets and other' do
     end
 
     it 'encode' do
-      expect( hoge.encode ).to eql ["a50102110f"].pack('H*')
+      expect( hoge.encode ).to eql ["0f110102a5"].pack('H*')
+    end
+
+    it 'decode' do
+      hoge = Hoge.from_bytes(["0f110102a5"].pack('H*'))
+      expect( hoge.hoge_attr1 ).to eql 0x5
+      expect( hoge.hoge_attr2 ).to eql 0xa
+      expect( hoge.hoge_attr3 ).to eql ["0102"].pack('H*')
+      expect( hoge.hoge_attr4 ).to eql ["11"].pack('H*')
+      expect( hoge.hoge_attr5 ).to eql 0xf
     end
   end
 end

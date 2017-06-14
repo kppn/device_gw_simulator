@@ -231,12 +231,14 @@ module Binary
     end
 
     def define_attr_decode_octets_method(name, params)
+      byte_range = ( ((params[:pos].min+1)/8) ... ((params[:pos].max+1)/8) )
+
       unpack_to_string = Proc.new {|byte_str|
         self::Endian == :little_endian ? byte_str.reverse : byte_str
       }
 
       define_method("decode_#{name}") do |byte_str|
-        unpacked = unpack_to_string.call(byte_str)
+        unpacked = unpack_to_string.call(byte_str.reverse[byte_range].reverse)
         self.send("#{name}=", unpacked)
       end
     end
@@ -376,7 +378,7 @@ module Binary
           else
             pack_numerics(group)
           end
-        }.join('')
+        }.reverse.join('')
       end
 
 
@@ -447,7 +449,7 @@ module Binary
       end
 
       def valid_octets_range_value?(val, params)
-        val.bytesize == params[:pos].size / 8
+        val.bytesize == (params[:pos].size) / 8
       end
 
       def make_pack(defs)
