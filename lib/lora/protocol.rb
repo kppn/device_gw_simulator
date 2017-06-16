@@ -2,6 +2,120 @@ require_relative '../util/binary'
 require_relative 'lora_encryption'
 require_relative 'lora_encryption_service'
 
+
+#====================================
+# MAC Commands
+#====================================
+
+class LinkCheckReq
+  attr_accessor :value
+
+  def encode
+    ''
+  end
+
+  def self.from_bytes(byte_str)
+    self.new(value: '')
+  end
+end
+
+
+class LinkCheckAns
+  include Binary
+  
+  bit_structure [
+    [15..8, :margin,   :numeric],
+    [ 7..0, :gwcnt,    :numeric]
+  ]
+
+  define_option_params_initializer
+end
+
+
+
+class LinkADRReq
+  include Binary
+  
+  bit_structure [
+    [31..28, :datarate,   :enum, {
+                            sf12_125khz:  0,
+                            sf11_125khz:  1,
+                            sf10_125khz:  2,
+                            sf9_125khz:   3,
+                            sf8_125khz:   4,
+                            sf7_125khz:   5,
+                            sf7_250khz:   6,
+                            fsk_50kbps:   7,
+                          }],
+    [27..25, :txpower,    :enum, {
+                            maxeirp:             0,
+                            maxeirp_minus_2db:   1,
+                            maxeirp_minus_4db:   2,
+                            maxeirp_minus_6db:   3,
+                            maxeirp_minus_8db:   4,
+                            maxeirp_minus_10db:  5,
+                            maxeirp_minus_12db:  6,
+                            maxeirp_minus_14db:  7,
+                          }],
+    [24.. 8, :chmask,     :numeric],
+    [ 7,     :undefined],
+    [ 6.. 4, :chmaskctl,  :numeric],
+    [ 3.. 0, :nbtrans,    :numeric],
+  ]
+  define_option_params_initializer
+end
+
+
+class LinkADRAns
+  include Binary
+  
+  bit_structure [
+    [7..3,   :undefined],
+    [2..2,   :powerack,       :flag],
+    [1..1,   :datarateack,    :flag],
+    [0..0,   :channelmaskack, :flag],
+  ]
+  define_option_params_initializer
+end
+
+
+
+class MACCommand
+  include Binary
+
+  LinkCheck = 2
+  LinkADR   = 3
+
+  MACCommandKlasses = {
+    2 => {up:   LinkCheckReq, down: LinkCheckAns},
+    3 => {down: LinkADRReq,   up:   LinkADRAns},
+    # othres are NOT implemented yet
+  }
+
+  attr_accessor :cid, :payload
+
+  define_option_params_initializer
+
+  def encode
+    cid.pack8 + payload.encode
+  end
+
+  def self.from_bytes(byte_str, direction = :up)
+    cmd = self.new
+    cmd.cid = byte_str[0].unpack('C').shift
+
+    klass = MACCommandKlasses[cmd.cid][direction]
+    cmd.payload = klass.from_bytes(byte_str[1..-1])
+
+    cmd
+  end
+end
+
+
+#====================================
+# LoRa Basics
+#====================================
+
 class DevAddr
   include Binary
   
@@ -92,11 +206,13 @@ class FOpts
   define_option_params_initializer
 
   def encode
-    value || ''
+    self.value.encode
   end
 
   def self.from_bytes(byte_str)
-    self.new.tap{|o| o.value = byte_str.dup}
+    fopts = self.new
+    fopts.value = MACCommand.from_bytes(byte_str)
+    fopts
   end
 end
   
