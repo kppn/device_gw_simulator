@@ -21,8 +21,8 @@ describe 'PHYPayload' do
           macpayload: MACPayload.new(
             fhdr: FHDR.new(
               devaddr: DevAddr.new(
-                nwkid:   0b1000000,
-                nwkaddr: 0b0_10000001_10000010_10000011
+                nwkid:   0b1000001,
+                nwkaddr: 0b0_01110000_01111000_01111100
               ),
               fctrl: FCtrl.new(
                 adr: false,
@@ -42,7 +42,7 @@ describe 'PHYPayload' do
 
       it 'without encryption' do
         expect(phypayload.encode).to eql(
-          ["40" + "83828180" + "00" + "0201" + "" + "01" + "0102030405060708"].pack('H*')
+          ["40" + "7c787082" + "00" + "0201" + "" + "01" + "0102030405060708"].pack('H*')
         )
       end
 
@@ -89,12 +89,12 @@ describe 'PHYPayload' do
           macpayload: JoinAcceptPayload.new(
             appnonce: AppNonce.new(value: "\x01\x02\x03"),
             netid: NetId.new(
-              nwkid:   0b1000000,
-              addr:    0b0_10000001_10000010
+              addr:    0b0_01111000_01111100,
+              nwkid:   0b1000001
             ),
             devaddr: DevAddr.new(
-              nwkid:   0b1001000,
-              nwkaddr: 0b0_10010001_10010010_10010011
+              nwkid:   0b1000001,
+              nwkaddr: 0b0_01110000_01111000_01111100
             ),
             dlsettings: DLSettings.new(
               rx1droffset: 0,
@@ -120,7 +120,7 @@ describe 'PHYPayload' do
 
       it 'without encryption' do
         expect(phypayload.encode).to eql(
-          ["20" + "030201" + "828180" + "93929190" + "01" + "02" +
+          ["20" + "030201" + "413e3c" + "7c787082" + "01" + "02" +
            "8cde80" + "8ce650" + "8cee20" + "8cf5f0" + "8cfdc0" + "00"].pack('H*')
         )
       end
@@ -128,6 +128,9 @@ describe 'PHYPayload' do
       it 'encryption' do
         encode         = phypayload.encode
         encode_encrypt = phypayload.encode(appkey: appkey)
+
+	p encode.to_hexstr
+	p encode_encrypt.to_hexstr
 
         expect(encode_encrypt[0]).to eql encode[0]
         expect(encode_encrypt[1..27]).not_to eql encode[1..27]        # encrypted
@@ -153,8 +156,8 @@ describe 'PHYPayload' do
       #   macpayload: MACPayload.new(
       #     fhdr: FHDR.new(
       #       devaddr: DevAddr.new(
-      #         nwkid:   0b1000000,
-      #         nwkaddr: 0b0_10000001_10000010_10000011
+      #         nwkid:   0b1000001,
+      #         nwkaddr: 0b0_01110000_01111000_01111100
       #       ),
       #       fctrl: FCtrl.new(
       #         adr: false,
@@ -172,10 +175,10 @@ describe 'PHYPayload' do
       # )
 
       let(:phypayload_encoded_without_encrypt) {
-        ['4083828180000201010102030405060708'].pack('H*')
+        ['407c787082000201010102030405060708'].pack('H*')
       }
       let(:phypayload_encoded_encrypt) {
-        ['40838281800002010108d2b505feea80b27c08d373'].pack('H*')
+        ['407c787082000201015ebf8ac02d342a116c4f434c'].pack('H*')
       }
 
       it 'without encryption' do
@@ -190,8 +193,8 @@ describe 'PHYPayload' do
         expect(phypayload.macpayload.fhdr.class).to eql FHDR
 
         expect(phypayload.macpayload.fhdr.devaddr.class).to   eql DevAddr
-        expect(phypayload.macpayload.fhdr.devaddr.nwkid).to   eql 0b1000000
-        expect(phypayload.macpayload.fhdr.devaddr.nwkaddr).to eql 0b0_10000001_10000010_10000011
+        expect(phypayload.macpayload.fhdr.devaddr.nwkid).to   eql 0b1000001
+        expect(phypayload.macpayload.fhdr.devaddr.nwkaddr).to eql 0b0_01110000_01111000_01111100
 
         expect(phypayload.macpayload.fhdr.fctrl.class).to     eql FCtrl
         expect(phypayload.macpayload.fhdr.fctrl.adr).to       be false
@@ -219,8 +222,8 @@ describe 'PHYPayload' do
         expect(phypayload.macpayload.fhdr.class).to eql FHDR
 
         expect(phypayload.macpayload.fhdr.devaddr.class).to   eql DevAddr
-        expect(phypayload.macpayload.fhdr.devaddr.nwkid).to   eql 0b1000000
-        expect(phypayload.macpayload.fhdr.devaddr.nwkaddr).to eql 0b0_10000001_10000010_10000011
+        expect(phypayload.macpayload.fhdr.devaddr.nwkid).to   eql 0b1000001
+        expect(phypayload.macpayload.fhdr.devaddr.nwkaddr).to eql 0b0_01110000_01111000_01111100
 
         expect(phypayload.macpayload.fhdr.fctrl.class).to     eql FCtrl
         expect(phypayload.macpayload.fhdr.fctrl.adr).to       eql false
@@ -277,12 +280,12 @@ describe 'PHYPayload' do
       #    macpayload: JoinAcceptPayload.new(
       #      appnonce: "\x01\x02\x03",
       #      netid: NetId.new(
-      #        nwkid:   0b1000000,
-      #        addr:    0b0_10000001_10000010
+      #        addr:    0b0_01111000_01111100,
+      #        nwkid:   0b1000001
       #      ),
       #      devaddr: DevAddr.new(
-      #        nwkid:   0b1001000,
-      #        nwkaddr: 0b0_10010001_10010010_10010011
+      #        nwkid:   0b1000001,
+      #        nwkaddr: 0b0_01110000_01111000_01111100
       #      ),
       #      dlsettings: DLSettings.new(
       #        rx1droffset: 0,
@@ -300,10 +303,10 @@ describe 'PHYPayload' do
       #    mic: '',
       #  )
       let(:phypayload_encoded_without_encrypt) {
-        ['200302018281809392919001028cde808ce6508cee208cf5f08cfdc000'].pack('H*')
+        ['20030201413e3c7c78708201028cde808ce6508cee208cf5f08cfdc000'].pack('H*')
       }
       let(:phypayload_encoded_encrypt) {
-        ['20608a9ed46b994d3b3cd282acc0662ec6f530f539e6efeb0ab2c56c4d325a6fe9'].pack('H*')
+        ['2082f517ae0b972a1869a7e6cbf61e3d3484c073d44f5765c191783bd3fe4c3103'].pack('H*')
        }
 
 
@@ -316,11 +319,11 @@ describe 'PHYPayload' do
 
         expect( phypayload.macpayload.appnonce ).to eql "\x01\x02\x03"
 
-        expect( phypayload.macpayload.netid.nwkid ).to eql 0b1000000
-        expect( phypayload.macpayload.netid.addr ).to  eql 0b0_10000001_10000010
+        expect( phypayload.macpayload.netid.nwkid ).to eql 0b1000001
+        expect( phypayload.macpayload.netid.addr ).to  eql 0b0_01111000_01111100
 
-        expect( phypayload.macpayload.devaddr.nwkid ).to   eql 0b1001000
-        expect( phypayload.macpayload.devaddr.nwkaddr ).to eql 0b0_10010001_10010010_10010011
+        expect( phypayload.macpayload.devaddr.nwkid ).to   eql 0b1000001
+        expect( phypayload.macpayload.devaddr.nwkaddr ).to eql 0b0_01110000_01111000_01111100
 
         expect( phypayload.macpayload.dlsettings.rx1droffset ).to eql 0
         expect( phypayload.macpayload.dlsettings.rx2datarate ).to eql 1
@@ -342,11 +345,11 @@ describe 'PHYPayload' do
 
         expect( phypayload.macpayload.appnonce ).to eql "\x01\x02\x03"
 
-        expect( phypayload.macpayload.netid.nwkid ).to eql 0b1000000
-        expect( phypayload.macpayload.netid.addr ).to  eql 0b0_10000001_10000010
+        expect( phypayload.macpayload.netid.nwkid ).to eql 0b1000001
+        expect( phypayload.macpayload.netid.addr ).to  eql 0b0_01111000_01111100
 
-        expect( phypayload.macpayload.devaddr.nwkid ).to   eql 0b1001000
-        expect( phypayload.macpayload.devaddr.nwkaddr ).to eql 0b0_10010001_10010010_10010011
+        expect( phypayload.macpayload.devaddr.nwkid ).to   eql 0b1000001
+        expect( phypayload.macpayload.devaddr.nwkaddr ).to eql 0b0_01110000_01111000_01111100
 
         expect( phypayload.macpayload.dlsettings.rx1droffset ).to eql 0
         expect( phypayload.macpayload.dlsettings.rx2datarate ).to eql 1

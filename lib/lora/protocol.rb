@@ -155,8 +155,8 @@ class NetId
   
   bit_structure [
     :little_endian,
-    [23..17, :nwkid,   :numeric],
-    [16..0,  :addr,    :numeric],
+    [23..7,  :addr,    :numeric],
+    [ 6..0,  :nwkid,   :numeric],
   ]
   define_option_params_initializer
 end
