@@ -209,9 +209,9 @@ class FOpts
     self.value.encode
   end
 
-  def self.from_bytes(byte_str)
+  def self.from_bytes(byte_str, direction = :up)
     fopts = self.new
-    fopts.value = MACCommand.from_bytes(byte_str)
+    fopts.value = MACCommand.from_bytes(byte_str, direction)
     fopts
   end
 end
@@ -231,13 +231,13 @@ class FHDR
     [devaddr, fctrl, @fcnt, @fopts].map(&:encode).join
   end
 
-  def self.from_bytes(byte_str)
+  def self.from_bytes(byte_str, direction = :up)
     fhdr = self.new
     fhdr.devaddr  = DevAddr.from_bytes(byte_str[0..3])
     fhdr.fctrl    = FCtrl.from_bytes(byte_str[4])
     fhdr.fcnt     = FCnt.from_bytes(byte_str[5..6])
     if fhdr.fctrl.foptslen > 0
-      fhdr.fopts = FOpts.from_bytes(byte_str[7..(7+fhdr.fctrl.foptslen-1)])
+      fhdr.fopts = FOpts.from_bytes(byte_str[7..(7+fhdr.fctrl.foptslen-1)], direction)
     end
     fhdr
   end
@@ -321,10 +321,10 @@ class MACPayload
     [fhdr.encode, @fport.encode, frmpayload_enc].join
   end
 
-  def self.from_bytes(byte_str)
+  def self.from_bytes(byte_str, direction = :up)
     macpayload = self.new
 
-    macpayload.fhdr       = FHDR.from_bytes(byte_str[0..-1])
+    macpayload.fhdr       = FHDR.from_bytes(byte_str[0..-1], direction)
     foptslen              = macpayload.fhdr.fctrl.foptslen
     macpayload.fport      = FPort.from_bytes(byte_str[(7+foptslen)..(7+foptslen)])
     macpayload.frmpayload = FRMPayload.from_bytes(byte_str[(8+foptslen)..-1])
@@ -505,20 +505,21 @@ class PHYPayload
 
   def self.from_bytes(byte_str, keys = {})
     if keys.size == 0
-      phypayloed = self.new
-      phypayloed.mhdr = MHDR.from_bytes(byte_str[0])
+      phypayload = self.new
+      phypayload.mhdr = MHDR.from_bytes(byte_str[0])
+      phypayload.set_direction
 
-      phypayloed.macpayload = case phypayloed.mhdr.mtype
+      phypayload.macpayload = case phypayloed.mhdr.mtype
                               when MHDR::JoinRequest
                                 JoinRequestPayload.from_bytes(byte_str[1..-1])
                               when MHDR::JoinAccept
                                 JoinAcceptPayload.from_bytes(byte_str[1..-1])
                               else
-                                MACPayload.from_bytes(byte_str[1..-1])
-                              end
+                                MACPayload.from_bytes(byte_str[1..-1], phypayload.direction)
+                             end
 
-      phypayloed.raw = byte_str
-      phypayloed
+      phypayload.raw = byte_str
+      phypayload
     else
       service = LoRaDecryptionService.new(byte_str, keys)
       phypayload = service.get_decrypted_phypayload

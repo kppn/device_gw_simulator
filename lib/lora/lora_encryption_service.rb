@@ -53,7 +53,7 @@ class LoRaDecryptionService
 
   def calc_decrypted_payload_and_mic
     mic = @bytes[-4..-1]
-    macpayload = MACPayload.from_bytes(@bytes[1..-5])
+    macpayload = MACPayload.from_bytes(@bytes[1..-5], @direction)
 
     macpayload.frmpayload = LoRaEncryption.encrypt_payload(
                               macpayload.frmpayload.encode,
