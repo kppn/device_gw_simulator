@@ -8,20 +8,13 @@ require 'pcaprub'
 require_relative 'lib/lora/protocol'
 
 
+lora_bytes = "@\x94\x1E\x04&\x80\xD3\x03\x01\x15x\x86\x8B#b\x8E\x03"
 
-appskey = ["194730F1F3CCD64DDB0E271F247EBA41"].pack('H*')
-nwkskey = ["7001D7176C75A948B3B08B1D99DA1E49"].pack('H*')
+appkey  = ["FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF"].pack('H*')
+appskey = ["74ADCDC988A9B513F2A03FB9C39CE781"].pack('H*')
+nwkskey = ["47E3C9151666263D07C34311696FE772"].pack('H*')
 
-lora_enc = Base64.decode64("YCoUBCYAAgABzsoSL6s=")
-
-pp "lora raw value: #{lora_enc.to_hexstr}"
-puts
-
-phypayload = PHYPayload.from_bytes(lora_enc, appskey, :down)
-pp phypayload
-
-puts
-pp "raw value: #{phypayload.macpayload.frmpayload.value.to_hexstr}"
+pp PHYPayload.from_bytes(lora_bytes, appkey: appkey, nwkskey: nwkskey, appskey: appskey)
 
 
 
