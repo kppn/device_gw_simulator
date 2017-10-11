@@ -80,16 +80,215 @@ end
 
 
 
+class DutyCycleReq
+  include Binary
+  
+  bit_structure [
+    [7..4,   :undefined],
+    [3..0,   :maxdcycle,   :numeric],
+  ]
+  define_option_params_initializer
+end
+
+
+class DutyCycleAns
+  attr_accessor :value
+
+  def encode
+    ''
+  end
+
+  def self.from_bytes(byte_str)
+    self.new(value: '')
+  end
+end
+
+
+class RXParamSetupAnsStatus
+  include Binary
+  
+  bit_structure [
+    [2..2,   :rx1droffsetack,       :flag],
+    [1..1,   :rx2droffsetack,       :flag],
+    [0..0,   :channelack,           :flag],
+  ]
+  define_option_params_initializer
+end
+
+
+class RXParamSetupReq
+  include Binary
+
+  attr_accessor :dlsettings, frequency
+
+  define_option_params_initializer
+
+  def encode
+    [@dlsettings, @frequency].map(&:encode).join
+  end
+
+  def self.from_bytes(byte_str)
+    rxparamsetupreq = self.new
+    rxparamsetupreq.dlsettings = DLSettings.from_bytes(byte_str[0])
+    rxparamsetupreq.frequency  = ChannelFrequency.from_bytes(byte_str[1..3])
+    rxparamsetupreq
+  end
+end
+
+
+class RXParamSetupAns
+  include Binary
+
+  attr_accessor :status
+
+  define_option_params_initializer
+
+  def encode
+    @status.encode
+  end
+
+  def self.from_bytes(byte_str)
+    rxparamsetupans = self.new
+    rxparamsetupans.status = RXParamSetupAnsStatus.from_bytes(byte_str[0])
+    rxparamsetupans
+  end
+end
+
+
+class DevStatusReq
+  attr_accessor :value
+
+  def encode
+    ''
+  end
+
+  def self.from_bytes(byte_str)
+    self.new(value: '')
+  end
+end
+
+
+class DevStatusAns
+  include Binary
+
+  # TODO: signed
+  attr_accessor :battery
+  bit_structure [
+    [15..8,   :battery,       :numeric],
+    [ 7..6,   :undefined],
+    [ 5..0,   :margin,        :flag],
+  ]
+  define_option_params_initializer
+end
+
+
+class DrRange
+  include Binary
+
+  bit_structure [
+    [ 7..4,   :maxdr,       :numeric],
+    [ 3..0,   :mindr,       :numeric],
+  ]
+  define_option_params_initializer
+end
+
+
+class NewChannelAnsStatus
+  include Binary
+
+  bit_structure [
+    [ 7..2,   :undefined],
+    [ 1..1,   :dataraterangeok,        :flag],
+    [ 1..1,   :channelfrequencyok,     :flag],
+  ]
+  define_option_params_initializer
+end
+
+
+class NewChannelReq
+  include Binary
+
+  attr_accessor :chindex, freq, drrange
+
+  define_option_params_initializer
+
+  def encode
+    chindex.pack8 + freq.encode + drrange.encode
+  end
+
+  def self.from_bytes(byte_str)
+    newchannelreq = self.new
+
+    newchannelreq.chindex = byte_str[0].unpack('C').shift
+    newchannelreq.freq    = ChannelFrequency.from_bytes(byte_str[1..3])
+    newchannelreq.drrange = DrRange.from_bytes(byte_str[4..4])
+
+    newchannelreq
+  end
+end
+
+
+class NewChannelAns
+  include Binary
+
+  attr_accessor :status
+
+  def encode
+  end
+
+  def self.from_bytes(byte_str)
+    newchannelans = self.new
+
+    newchannelans.status = NewChannelAnsStatus.from_bytes(byte_str[0])
+
+    newchannelans
+  end
+end
+
+
+class RXTimingSetupReq
+  include Binary
+
+  bit_structure [
+    [ 7..4,   :undefined],
+    [ 3..0,   :del,              :numeric],
+  ]
+  define_option_params_initializer
+end
+
+
+class RXTimingSetupAns
+  attr_accessor :value
+
+  def encode
+    ''
+  end
+
+  def self.from_bytes(byte_str)
+    self.new(value: '')
+  end
+end
+
+
 class MACCommand
   include Binary
 
-  LinkCheck = 2
-  LinkADR   = 3
+  LinkCheck      = 2
+  LinkADR        = 3
+  DutyCycle      = 4
+  RXParamSetup   = 5
+  DevStatus      = 6
+  NewChannel     = 7
+  RXTimingSetup  = 8
 
   MACCommandKlasses = {
-    2 => {up:   LinkCheckReq, down: LinkCheckAns},
-    3 => {down: LinkADRReq,   up:   LinkADRAns},
-    # othres are NOT implemented yet
+    2 => {up:   LinkCheckReq,     down: LinkCheckAns},
+    3 => {down: LinkADRReq,       up:   LinkADRAns},
+    4 => {down: DutyCycleReq,     up:   DutyCycleAns},
+    5 => {down: RXParamSetupReq,  up:   RXParamSetupAns},
+    6 => {down: DevStatusReq,     up:   DevStatusAns},
+    7 => {down: NewChannelReq,    up:   NewChannelAns},
+    8 => {down: RXTimingSetupReq, up:   RXTimingSetupAns},
   }
 
   attr_accessor :cid, :payload
