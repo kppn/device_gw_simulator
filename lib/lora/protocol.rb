@@ -171,7 +171,6 @@ end
 class DevStatusAns
   include Binary
 
-  # TODO: signed
   attr_accessor :battery
   bit_structure [
     [15..8,   :battery,       :numeric],
@@ -179,6 +178,25 @@ class DevStatusAns
     [ 5..0,   :margin,        :flag],
   ]
   define_option_params_initializer
+
+  attr_accessor :margin
+
+  alias old_encode encode
+  def encode
+    DevStatusAns.new(
+      battery: battery,
+      margin: margin & 0x3F
+    ).old_encode
+  end
+
+  class << self
+    alias old_from_bytes from_bytes
+    def from_bytes(byte_str)
+      devstatusans = old_from_bytes(byte_str[0..1])
+      devstatusans.margin -=64 if devstatusans.margin > 31
+      devstatusans
+    end
+  end
 end
 
 
