@@ -3,19 +3,33 @@ require_relative 'lora_encryption'
 require_relative 'lora_encryption_service'
 
 
+
+#====================================
+# Common
+#====================================
+class ChannelFrequency
+  include Binary
+  
+  bit_structure [
+    :little_endian,
+    [23..0, :value,   :numeric, factor: 100],    # The actual in Hz is *100
+  ]
+  define_option_params_initializer
+end
+
+
+
 #====================================
 # MAC Commands
 #====================================
 
 class LinkCheckReq
-  attr_accessor :value
-
   def encode
     ''
   end
 
   def self.from_bytes(byte_str)
-    self.new(value: '')
+    self.new
   end
 end
 
@@ -47,7 +61,7 @@ class LinkADRReq
                             sf7_250khz:   6,
                             fsk_50kbps:   7,
                           }],
-    [27..25, :txpower,    :enum, {
+    [27..24, :txpower,    :enum, {
                             maxeirp:             0,
                             maxeirp_minus_2db:   1,
                             maxeirp_minus_4db:   2,
@@ -57,7 +71,7 @@ class LinkADRReq
                             maxeirp_minus_12db:  6,
                             maxeirp_minus_14db:  7,
                           }],
-    [24.. 8, :chmask,     :numeric],
+    [23.. 8, :chmask,     :numeric],
     [ 7,     :undefined],
     [ 6.. 4, :chmaskctl,  :numeric],
     [ 3.. 0, :nbtrans,    :numeric],
@@ -92,14 +106,12 @@ end
 
 
 class DutyCycleAns
-  attr_accessor :value
-
   def encode
     ''
   end
 
   def self.from_bytes(byte_str)
-    self.new(value: '')
+    self.new
   end
 end
 
@@ -119,12 +131,14 @@ end
 class RXParamSetupReq
   include Binary
 
-  attr_accessor :dlsettings, :frequency
-
+  attr_accessor :dlsettings
+  wrapped_accessor({
+    frequency: [ChannelFrequency, :value],
+  })
   define_option_params_initializer
 
   def encode
-    [@dlsettings, @frequency].map(&:encode).join
+    [dlsettings, @frequency].map(&:encode).join
   end
 
   def self.from_bytes(byte_str)
@@ -163,7 +177,7 @@ class DevStatusReq
   end
 
   def self.from_bytes(byte_str)
-    self.new(value: '')
+    self.new
   end
 end
 
@@ -171,7 +185,7 @@ end
 class DevStatusAns
   include Binary
 
-  attr_accessor :battery
+  #attr_accessor :battery
   bit_structure [
     [15..8,   :battery,       :numeric],
     [ 7..6,   :undefined],
@@ -217,7 +231,7 @@ class NewChannelAnsStatus
   bit_structure [
     [ 7..2,   :undefined],
     [ 1..1,   :dataraterangeok,        :flag],
-    [ 1..1,   :channelfrequencyok,     :flag],
+    [ 0..0,   :channelfrequencyok,     :flag],
   ]
   define_option_params_initializer
 end
@@ -226,20 +240,22 @@ end
 class NewChannelReq
   include Binary
 
-  attr_accessor :chindex, :freq, :drrange
-
+  attr_accessor :chindex, :drrange
+  wrapped_accessor({
+    frequency: [ChannelFrequency, :value],
+  })
   define_option_params_initializer
 
   def encode
-    chindex.pack8 + freq.encode + drrange.encode
+    chindex.pack8 + @frequency.encode + drrange.encode
   end
 
   def self.from_bytes(byte_str)
     newchannelreq = self.new
 
-    newchannelreq.chindex = byte_str[0].unpack('C').shift
-    newchannelreq.freq    = ChannelFrequency.from_bytes(byte_str[1..3])
-    newchannelreq.drrange = DrRange.from_bytes(byte_str[4..4])
+    newchannelreq.chindex   = byte_str[0].unpack('C').shift
+    newchannelreq.frequency = ChannelFrequency.from_bytes(byte_str[1..3])
+    newchannelreq.drrange   = DrRange.from_bytes(byte_str[4..4])
 
     newchannelreq
   end
@@ -251,7 +267,10 @@ class NewChannelAns
 
   attr_accessor :status
 
+  define_option_params_initializer
+
   def encode
+    status.encode
   end
 
   def self.from_bytes(byte_str)
@@ -283,7 +302,134 @@ class RXTimingSetupAns
   end
 
   def self.from_bytes(byte_str)
-    self.new(value: '')
+    self.new
+  end
+end
+
+
+class EIRPDwellTime
+  include Binary
+
+  bit_structure [
+    [ 7..6,   :undefined],
+    [ 5..5,   :downlinkdwelltime,    :enum, {
+                            no_limit:        0,
+                            dwelltime_400ms: 1
+                          }],
+    [ 4..4,   :uplinkdwelltime,  :enum, {
+                            no_limit:        0,
+                            dwelltime_400ms: 1
+                          }],
+    [ 3..0,   :maxeirp,   :enum, {
+                            maxeirp_8dbm:    0,
+                            maxeirp_10dbm:   1,
+                            maxeirp_12dbm:   2,
+                            maxeirp_13dbm:   3,
+                            maxeirp_14dbm:   4,
+                            maxeirp_16dbm:   5,
+                            maxeirp_18dbm:   6,
+                            maxeirp_20dbm:   7,
+                            maxeirp_21dbm:   8,
+                            maxeirp_24dbm:   9,
+                            maxeirp_26dbm:  10,
+                            maxeirp_27dbm:  11,
+                            maxeirp_29dbm:  12,
+                            maxeirp_30dbm:  13,
+                            maxeirp_33dbm:  14,
+                            maxeirp_36dbm:  15
+                          }]
+  ]
+  define_option_params_initializer
+end
+
+
+class TxParamSetupReq
+  include Binary
+
+  attr_accessor :eirpdwelltime
+
+  define_option_params_initializer
+
+  def encode
+    eirpdwelltime.encode
+  end
+
+  def self.from_bytes(byte_str)
+    txparamsetupreq = self.new
+
+    txparamsetupreq.eirpdwelltime = EIRPDwellTime.from_bytes(byte_str[0])
+
+    txparamsetupreq
+  end
+end
+
+
+class TxParamSetupAns
+  attr_accessor :value
+
+  def encode
+    ''
+  end
+
+  def self.from_bytes(byte_str)
+    self.new
+  end
+end
+
+
+class DlChannelAnsStatus
+  include Binary
+
+  bit_structure [
+    [ 7..2,   :undefined],
+    [ 1..1,   :uplinkfrequencyexists,    :flag],
+    [ 0..0,   :channelfrequencyok,       :flag],
+  ]
+  define_option_params_initializer
+end
+
+
+class DlChannelReq
+  include Binary
+
+  attr_accessor :chindex
+  wrapped_accessor({
+    freq: [ChannelFrequency, :value],
+  })
+  define_option_params_initializer
+
+  def encode
+    chindex.pack8 + @freq.encode
+  end
+
+  def self.from_bytes(byte_str)
+    dlchannelreq = self.new
+
+    dlchannelreq.chindex = byte_str[0].unpack('C')
+    dlchannelreq.freq    = ChannelFrequency.from_bytes(byte_str[1..3])
+
+    dlchannelreq
+  end
+end
+
+
+class DlChannelAns
+  include Binary
+
+  attr_accessor :status
+
+  define_option_params_initializer
+
+  def encode
+    status.encode
+  end
+
+  def self.from_bytes(byte_str)
+    dlchannelans = self.new
+
+    dlchannelans.status = DlChannelAnsStatus.from_bytes(byte_str[0])
+
+    dlchannelans
   end
 end
 
@@ -298,15 +444,19 @@ class MACCommand
   DevStatus      = 6
   NewChannel     = 7
   RXTimingSetup  = 8
+  TxParamSetup   = 9
+  DlChannel      = 10
 
   MACCommandKlasses = {
-    2 => {up:   LinkCheckReq,     down: LinkCheckAns},
-    3 => {down: LinkADRReq,       up:   LinkADRAns},
-    4 => {down: DutyCycleReq,     up:   DutyCycleAns},
-    5 => {down: RXParamSetupReq,  up:   RXParamSetupAns},
-    6 => {down: DevStatusReq,     up:   DevStatusAns},
-    7 => {down: NewChannelReq,    up:   NewChannelAns},
-    8 => {down: RXTimingSetupReq, up:   RXTimingSetupAns},
+     2 => {up:   LinkCheckReq,     down: LinkCheckAns},
+     3 => {down: LinkADRReq,       up:   LinkADRAns},
+     4 => {down: DutyCycleReq,     up:   DutyCycleAns},
+     5 => {down: RXParamSetupReq,  up:   RXParamSetupAns},
+     6 => {down: DevStatusReq,     up:   DevStatusAns},
+     7 => {down: NewChannelReq,    up:   NewChannelAns},
+     8 => {down: RXTimingSetupReq, up:   RXTimingSetupAns},
+     9 => {down: TxParamSetupReq,  up:   TxParamSetupAns},
+    10 => {down: DlChannelReq,     up:   DlChannelAns},
   }
 
   attr_accessor :cid, :payload
@@ -609,16 +759,6 @@ class JoinRequestPayload
 
     join_request_payload
   end
-end
-
-
-class ChannelFrequency
-  include Binary
-  
-  bit_structure [
-    [23..0, :value,   :numeric, factor: 100],    # The actual in Hz is *100
-  ]
-  define_option_params_initializer
 end
 
 

@@ -102,11 +102,6 @@ describe 'PHYPayload' do
             ),
             rxdelay: 2,
             cflist: CFList.new(
-              #ch3: ChannelFrequency.new(value: 923_200_000),
-              #ch4: ChannelFrequency.new(value: 923_400_000),
-              #ch5: ChannelFrequency.new(value: 923_600_000),
-              #ch6: ChannelFrequency.new(value: 923_800_000),
-              #ch7: ChannelFrequency.new(value: 924_000_000),
               ch3: 923_200_000,
               ch4: 923_400_000,
               ch5: 923_600_000,
@@ -121,16 +116,16 @@ describe 'PHYPayload' do
       it 'without encryption' do
         expect(phypayload.encode).to eql(
           ["20" + "030201" + "413e3c" + "7c787082" + "01" + "02" +
-           "8cde80" + "8ce650" + "8cee20" + "8cf5f0" + "8cfdc0" + "00"].pack('H*')
+           "80de8c" + "50e68c" + "20ee8c" + "f0f58c" + "c0fd8c" + "00"].pack('H*')
         )
       end
 
       it 'encryption' do
         encode         = phypayload.encode
+        # as 20030201413e3c7c787082010280de8c50e68c20ee8cf0f58cc0fd8c00 
+        
         encode_encrypt = phypayload.encode(appkey: appkey)
-
-	p encode.to_hexstr
-	p encode_encrypt.to_hexstr
+        # as 20da662c2dba161240832c1747a4e50c64d10d22d4d6c555edf86227aeaa03e0be
 
         expect(encode_encrypt[0]).to eql encode[0]
         expect(encode_encrypt[1..27]).not_to eql encode[1..27]        # encrypted
@@ -303,10 +298,10 @@ describe 'PHYPayload' do
       #    mic: '',
       #  )
       let(:phypayload_encoded_without_encrypt) {
-        ['20030201413e3c7c78708201028cde808ce6508cee208cf5f08cfdc000'].pack('H*')
+        ['20030201413e3c7c787082010280de8c50e68c20ee8cf0f58cc0fd8c00'].pack('H*')
       }
       let(:phypayload_encoded_encrypt) {
-        ['2082f517ae0b972a1869a7e6cbf61e3d3484c073d44f5765c191783bd3fe4c3103'].pack('H*')
+        ['20da662c2dba161240832c1747a4e50c64d10d22d4d6c555edf86227aeaa03e0be'].pack('H*')
        }
 
 
@@ -381,11 +376,11 @@ describe 'ChannelFrequency' do
     end
 
     it 'encode' do
-      expect( cflist.encode ).to eql ["8cde80"].pack('H*')  # as 923_200_0
+      expect( cflist.encode ).to eql ["80de8c"].pack('H*')  # as 923_200_0
     end
 
     it 'decode' do
-      chf = ChannelFrequency.from_bytes("\x8c\xde\x80")
+      chf = ChannelFrequency.from_bytes("\x80\xde\x8c")
       expect( cflist.value ).to eql 923_200_000
     end
   end
@@ -408,11 +403,11 @@ describe 'CFList' do
     }
 
     it 'encode' do
-      expect( cflist.encode ).to eql ["8cde80" + "8ce650" + "8cee20" + "8cf5f0" + "8cfdc0" + "00"].pack('H*')
+      expect( cflist.encode ).to eql ["80de8c" + "50e68c" + "20ee8c" + "f0f58c" + "c0fd8c" + "00"].pack('H*')
     end
 
     it 'decode' do
-      cflist = CFList.from_bytes(["8cde80" + "8ce650" + "8cee20" + "8cf5f0" + "8cfdc0" + "00"].pack('H*'))
+      cflist = CFList.from_bytes(["80de8c" + "50e68c" + "20ee8c" + "f0f58c" + "c0fd8c" + "00"].pack('H*'))
       expect( cflist.ch3 ).to eql 923_200_000
       expect( cflist.ch7 ).to eql 924_000_000
     end
@@ -420,7 +415,530 @@ describe 'CFList' do
   
 end
 
+
+
 #=============================================================
-# CFList
+# LinkCheckReq/LinkCheckAns
 #=============================================================
+describe 'LinkCheckReq' do
+  describe 'encode/decode' do
+    let(:command) {
+      MACCommand.new(
+        cid: MACCommand::LinkCheck,
+        payload: LinkCheckReq.new
+      )
+    }
+
+    it 'encode' do
+      expect( command.encode ).to eql ["02"].pack('H*')
+    end
+
+    it 'decode' do
+      command = MACCommand.from_bytes(["02"].pack('H*'), :up)
+
+      expect( command.cid ).to eql 2
+      expect( command.payload.class ).to eql LinkCheckReq
+    end
+  end
+end
+
+describe 'LinkCheckAns' do
+  describe 'encode/decode' do
+    let(:command) {
+      MACCommand.new(
+        cid: MACCommand::LinkCheck,
+        payload: LinkCheckAns.new(
+          margin: 255,
+          gwcnt: 255
+        )
+      )
+    }
+
+    it 'encode' do
+      expect( command.encode ).to eql ["02" + "ff" + "ff"].pack('H*')
+    end
+
+    it 'decode' do
+      command = MACCommand.from_bytes(["02" + "ff" + "ff"].pack('H*'), :down)
+
+      expect( command.cid ).to eql 2
+      expect( command.payload.class ).to eql LinkCheckAns
+      expect( command.payload.margin ).to eql 255
+      expect( command.payload.gwcnt ).to eql 255
+    end
+  end
+end
+
+
+#=============================================================
+# LinkADRReq/LinkADRAns
+#=============================================================
+describe 'LinkADRReq' do
+  describe 'encode/decode' do
+    let(:command) {
+      MACCommand.new(
+        cid: MACCommand::LinkADR,
+        payload: LinkADRReq.new(
+          datarate: LinkADRReq::Sf7250khz,
+          txpower: LinkADRReq::MaxeirpMinus14db,
+          chmask: 0xffff,
+          chmaskctl: 7,
+          nbtrans: 3
+        )
+      )
+    }
+
+    it 'encode' do
+      expect( command.encode ).to eql ["03" + "67" + "ffff" + "73"].pack('H*')
+    end
+
+    it 'decode' do
+      command = MACCommand.from_bytes(["03" + "67" + "ffff" + "73"].pack('H*'), :down)
+
+      expect( command.cid ).to eql 3
+      expect( command.payload.class ).to eql LinkADRReq
+      expect( command.payload.datarate).to eql 6
+      expect( command.payload.txpower).to eql 7
+      expect( command.payload.chmask).to eql 0xffff
+      expect( command.payload.chmaskctl).to eql 7
+      expect( command.payload.nbtrans).to eql 3
+
+    end
+  end
+end
+
+describe 'LinkADRAns' do
+  describe 'encode/decode' do
+    let(:command) {
+      MACCommand.new(
+        cid: MACCommand::LinkADR,
+        payload: LinkADRAns.new(
+          powerack: true,
+          datarateack: true,
+          channelmaskack: true
+        )
+      )
+    }
+
+    it 'encode' do
+      expect( command.encode ).to eql ["03" + "07"].pack('H*')
+    end
+
+    it 'decode' do
+      command = MACCommand.from_bytes(["03" + "07"].pack('H*'), :up)
+
+      expect( command.cid ).to eql 3
+      expect( command.payload.class ).to eql LinkADRAns
+      expect( command.payload.powerack).to be_truthy
+      expect( command.payload.datarateack).to be_truthy
+      expect( command.payload.channelmaskack).to be_truthy
+    end
+  end
+end
+
+
+#=============================================================
+# DutyCycleReq/DutyCycleAns
+#=============================================================
+describe 'DutyCycleReq' do
+  describe 'encode/decode' do
+    let(:command) {
+      MACCommand.new(
+        cid: MACCommand::DutyCycle,
+        payload: DutyCycleReq.new(
+          maxdcycle: 15
+        )
+      )
+    }
+
+    it 'encode' do
+      expect( command.encode ).to eql ["04" + "0f"].pack('H*')
+    end
+
+    it 'decode' do
+      command = MACCommand.from_bytes(["04" + "0f"].pack('H*'), :down)
+
+      expect( command.cid ).to eql 4
+      expect( command.payload.class ).to eql DutyCycleReq
+      expect( command.payload.maxdcycle).to eql 15
+    end
+  end
+end
+
+describe 'DutyCycleAns' do
+  describe 'encode/decode' do
+    let(:command) {
+      MACCommand.new(
+        cid: MACCommand::DutyCycle,
+        payload: DutyCycleAns.new
+      )
+    }
+
+    it 'encode' do
+      expect( command.encode ).to eql ["04"].pack('H*')
+    end
+
+    it 'decode' do
+      command = MACCommand.from_bytes(["04"].pack('H*'), :up)
+
+      expect( command.cid ).to eql 4
+      expect( command.payload.class ).to eql DutyCycleAns
+    end
+  end
+end
+
+
+#=============================================================
+# RXParamSetupReq/RXParamSetupAns
+#=============================================================
+describe 'RXParamSetupReq' do
+  describe 'encode/decode' do
+    let(:command) {
+      MACCommand.new(
+        cid: MACCommand::RXParamSetup,
+        payload: RXParamSetupReq.new(
+          dlsettings: DLSettings.new(
+            rx1droffset: 7,
+            rx2datarate: 15
+          ),
+          frequency: 923_200_000
+        )
+      )
+    }
+
+    it 'encode' do
+      expect( command.encode ).to eql ["05" + "7f" + "80de8c"].pack('H*')
+    end
+
+    it 'decode' do
+      command = MACCommand.from_bytes(["05" + "7f" + "80de8c"].pack('H*'), :down)
+
+      expect( command.cid ).to eql 5
+      expect( command.payload.class ).to eql RXParamSetupReq
+      expect( command.payload.dlsettings.rx1droffset).to eql 7
+      expect( command.payload.dlsettings.rx2datarate).to eql 15
+    end
+  end
+end
+
+describe 'RXParamSetupAns' do
+  describe 'encode/decode' do
+    let(:command) {
+      MACCommand.new(
+        cid: MACCommand::RXParamSetup,
+        payload: RXParamSetupAns.new(
+          status: RXParamSetupAnsStatus.new(
+            rx1droffsetack: true,
+            rx2droffsetack: true,
+            channelack:     true
+          )
+        )
+      )
+    }
+
+    it 'encode' do
+      expect( command.encode ).to eql ["05" + "07"].pack('H*')
+    end
+
+    it 'decode' do
+      command = MACCommand.from_bytes(["05" + "07"].pack('H*'), :up)
+
+      expect( command.cid ).to eql 5
+      expect( command.payload.class ).to eql RXParamSetupAns
+      expect( command.payload.status.rx1droffsetack ).to be_truthy
+      expect( command.payload.status.rx2droffsetack).to be_truthy
+      expect( command.payload.status.channelack).to be_truthy
+    end
+  end
+end
+
+
+#=============================================================
+# DevStatusReq/DevStatusAns
+#=============================================================
+describe 'DevStatusReq' do
+  describe 'encode/decode' do
+    let(:command) {
+      MACCommand.new(
+        cid: MACCommand::DevStatus,
+        payload: DevStatusReq.new
+      )
+    }
+
+    it 'encode' do
+      expect( command.encode ).to eql ["06"].pack('H*')
+    end
+
+    it 'decode' do
+      command = MACCommand.from_bytes(["06"].pack('H*'), :down)
+
+      expect( command.cid ).to eql 6
+      expect( command.payload.class ).to eql DevStatusReq
+    end
+  end
+end
+
+describe 'DevStatusAns' do
+  describe 'encode/decode' do
+    let(:command) {
+      MACCommand.new(
+        cid: MACCommand::DevStatus,
+        payload: DevStatusAns.new(
+          battery: 255,
+          margin: -32
+        )
+      )
+    }
+
+    it 'encode' do
+      expect( command.encode ).to eql ["06" + "ff" + "20"].pack('H*')
+    end
+
+    it 'decode' do
+      command = MACCommand.from_bytes(["06" + "ff" + "20"].pack('H*'), :up)
+
+      expect( command.cid ).to eql 6
+      expect( command.payload.class ).to eql DevStatusAns
+      expect( command.payload.battery ).to eql 255
+      expect( command.payload.margin ).to eql -32
+    end
+  end
+end
+
+
+#=============================================================
+# NewChannelReq/NewChannelAns
+#=============================================================
+describe 'NewChannelReq' do
+  describe 'encode/decode' do
+    let(:command) {
+      MACCommand.new(
+        cid: MACCommand::NewChannel,
+        payload: NewChannelReq.new(
+          chindex: 255,
+          frequency: 923_200_000,
+          drrange: DrRange.new(
+            maxdr: 15,
+            mindr: 15
+          )
+        )
+      )
+    }
+
+    it 'encode' do
+      expect( command.encode ).to eql ["07" + "ff" + "80de8c" + "ff"].pack('H*')
+    end
+
+    it 'decode' do
+      command = MACCommand.from_bytes(["07" + "ff" + "80de8c" + "ff"].pack('H*'), :down)
+
+      expect( command.cid ).to eql 7
+      expect( command.payload.class ).to eql NewChannelReq
+      expect( command.payload.chindex).to eql 255
+      expect( command.payload.frequency).to eql 923_200_000
+      expect( command.payload.drrange.maxdr).to eql 15
+      expect( command.payload.drrange.mindr).to eql 15
+
+    end
+  end
+end
+
+describe 'NewChannelAns' do
+  describe 'encode/decode' do
+    let(:command) {
+      MACCommand.new(
+        cid: MACCommand::NewChannel,
+        payload: NewChannelAns.new(
+          status: NewChannelAnsStatus.new(
+            dataraterangeok: true,
+            channelfrequencyok: true,
+          )
+        )
+      )
+    }
+
+    it 'encode' do
+      expect( command.encode ).to eql ["07" + "03"].pack('H*')
+    end
+
+    it 'decode' do
+      command = MACCommand.from_bytes(["07" + "03"].pack('H*'), :up)
+
+      expect( command.cid ).to eql 7
+      expect( command.payload.class ).to eql NewChannelAns
+      expect( command.payload.status.dataraterangeok).to be_truthy
+      expect( command.payload.status.channelfrequencyok).to be_truthy
+    end
+  end
+end
+
+
+#=============================================================
+# RXTimingSetupReq/RXTimingSetupAns
+#=============================================================
+describe 'RXTimingSetupReq' do
+  describe 'encode/decode' do
+    let(:command) {
+      MACCommand.new(
+        cid: MACCommand::RXTimingSetup,
+        payload: RXTimingSetupReq.new(
+          del: 15
+        )
+      )
+    }
+
+    it 'encode' do
+      expect( command.encode ).to eql ["08" + "0f"].pack('H*')
+    end
+
+    it 'decode' do
+      command = MACCommand.from_bytes(["08" + "0f"].pack('H*'), :down)
+
+      expect( command.cid ).to eql 8
+      expect( command.payload.class ).to eql RXTimingSetupReq
+      expect( command.payload.del).to eql 15
+
+    end
+  end
+end
+
+describe 'RXTimingSetupAns' do
+  describe 'encode/decode' do
+    let(:command) {
+      MACCommand.new(
+        cid: MACCommand::RXTimingSetup,
+        payload: RXTimingSetupAns.new
+      )
+    }
+
+    it 'encode' do
+      expect( command.encode ).to eql ["08"].pack('H*')
+    end
+
+    it 'decode' do
+      command = MACCommand.from_bytes(["08"].pack('H*'), :up)
+
+      expect( command.cid ).to eql 8
+      expect( command.payload.class ).to eql RXTimingSetupAns
+    end
+  end
+end
+
+
+#=============================================================
+# TxParamSetupReq/TxParamSetupAns
+#=============================================================
+describe 'TxParamSetupReq' do
+  describe 'encode/decode' do
+    let(:command) {
+      MACCommand.new(
+        cid: MACCommand::TxParamSetup,
+        payload: TxParamSetupReq.new(
+          eirpdwelltime: EIRPDwellTime.new(
+            downlinkdwelltime: EIRPDwellTime::Dwelltime400ms,
+            uplinkdwelltime:   EIRPDwellTime::Dwelltime400ms,
+            maxeirp: EIRPDwellTime::Maxeirp36dbm
+          )
+        )
+      )
+    }
+
+    it 'encode' do
+      expect( command.encode ).to eql ["09" + "3f"].pack('H*')
+    end
+
+    it 'decode' do
+      command = MACCommand.from_bytes(["09" + "3f"].pack('H*'), :down)
+
+      expect( command.cid ).to eql 9
+      expect( command.payload.class ).to eql TxParamSetupReq
+      expect( command.payload.eirpdwelltime.downlinkdwelltime ).to be_truthy
+      expect( command.payload.eirpdwelltime.uplinkdwelltime).to be_truthy
+      expect( command.payload.eirpdwelltime.maxeirp).to eql 15
+
+    end
+  end
+end
+
+describe 'TxParamSetupAns' do
+  describe 'encode/decode' do
+    let(:command) {
+      MACCommand.new(
+        cid: MACCommand::TxParamSetup,
+        payload: TxParamSetupAns.new
+      )
+    }
+
+    it 'encode' do
+      expect( command.encode ).to eql ["09"].pack('H*')
+    end
+
+    it 'decode' do
+      command = MACCommand.from_bytes(["09"].pack('H*'), :up)
+
+      expect( command.cid ).to eql 9
+      expect( command.payload.class ).to eql TxParamSetupAns
+    end
+  end
+end
+
+
+#=============================================================
+# DlChannelReq/DlChannelAns
+#=============================================================
+describe 'DlChannelReq' do
+  describe 'encode/decode' do
+    let(:command) {
+      MACCommand.new(
+        cid: MACCommand::DlChannel,
+        payload: DlChannelReq.new(
+          chindex: 15,
+          freq: 923_200_000
+        )
+      )
+    }
+
+    it 'encode' do
+      expect( command.encode ).to eql ["0a" + "0f" + "80de8c"].pack('H*')
+    end
+
+    it 'decode' do
+      command = MACCommand.from_bytes(["0a" + "0f" + "80de8c"].pack('H*'), :down)
+
+      expect( command.cid ).to eql 10
+      expect( command.payload.class ).to eql DlChannelReq
+      expect( command.payload.freq ).to eql 923_200_000
+    end
+  end
+end
+
+describe 'DlChannelAns' do
+  describe 'encode/decode' do
+    let(:command) {
+      MACCommand.new(
+        cid: MACCommand::DlChannel,
+        payload: DlChannelAns.new(
+          status: DlChannelAnsStatus.new(
+            uplinkfrequencyexists: true,
+            channelfrequencyok: true
+          )
+        )
+      )
+    }
+
+    it 'encode' do
+      expect( command.encode ).to eql ["0a" + "03"].pack('H*')
+    end
+
+    it 'decode' do
+      command = MACCommand.from_bytes(["0a" + "03"].pack('H*'), :up)
+
+      expect( command.cid ).to eql 10
+      expect( command.payload.class ).to eql DlChannelAns
+      expect( command.payload.status.uplinkfrequencyexists).to be_truthy
+      expect( command.payload.status.channelfrequencyok).to be_truthy
+    end
+  end
+end
+
 
