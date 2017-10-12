@@ -119,7 +119,7 @@ end
 class RXParamSetupReq
   include Binary
 
-  attr_accessor :dlsettings, frequency
+  attr_accessor :dlsettings, :frequency
 
   define_option_params_initializer
 
@@ -226,7 +226,7 @@ end
 class NewChannelReq
   include Binary
 
-  attr_accessor :chindex, freq, drrange
+  attr_accessor :chindex, :freq, :drrange
 
   define_option_params_initializer
 
@@ -726,7 +726,7 @@ class PHYPayload
       phypayload.mhdr = MHDR.from_bytes(byte_str[0])
       phypayload.set_direction
 
-      phypayload.macpayload = case phypayloed.mhdr.mtype
+      phypayload.macpayload = case phypayload.mhdr.mtype
                               when MHDR::JoinRequest
                                 JoinRequestPayload.from_bytes(byte_str[1..-1])
                               when MHDR::JoinAccept
