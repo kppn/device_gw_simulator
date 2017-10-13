@@ -420,7 +420,7 @@ class DlChannelReq
   def self.from_bytes(byte_str)
     dlchannelreq = self.new
 
-    dlchannelreq.chindex = byte_str[0].unpack('C')
+    dlchannelreq.chindex = byte_str[0].unpack('C').first
     dlchannelreq.freq    = ChannelFrequency.from_bytes(byte_str[1..3])
 
     dlchannelreq

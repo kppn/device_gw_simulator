@@ -907,6 +907,7 @@ describe 'DlChannelReq' do
 
       expect( command.cid ).to eql 10
       expect( command.payload.class ).to eql DlChannelReq
+      expect( command.payload.chindex).to eql 15
       expect( command.payload.freq ).to eql 923_200_000
     end
   end
