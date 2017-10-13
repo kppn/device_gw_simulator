@@ -77,6 +77,21 @@ class LinkADRReq
     [ 3.. 0, :nbtrans,    :numeric],
   ]
   define_option_params_initializer
+
+  alias old_encode encode
+  def encode
+    encoded = old_encode
+    encoded[0] + encoded[2] + encoded[1] + encoded[3]
+  end
+
+  class << self
+    alias old_from_bytes from_bytes
+    def from_bytes(byte_str)
+      byte_str = byte_str[0] + byte_str[2] + byte_str[1] + byte_str[3]
+      obj = old_from_bytes(byte_str)
+      obj
+    end
+  end
 end
 
 

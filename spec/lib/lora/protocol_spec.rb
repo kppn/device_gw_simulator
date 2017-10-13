@@ -481,7 +481,7 @@ describe 'LinkADRReq' do
         payload: LinkADRReq.new(
           datarate: LinkADRReq::Sf7250khz,
           txpower: LinkADRReq::MaxeirpMinus14db,
-          chmask: 0xffff,
+          chmask: 0xabcd,
           chmaskctl: 7,
           nbtrans: 3
         )
@@ -489,17 +489,17 @@ describe 'LinkADRReq' do
     }
 
     it 'encode' do
-      expect( command.encode ).to eql ["03" + "67" + "ffff" + "73"].pack('H*')
+      expect( command.encode ).to eql ["03" + "67" + "cdab" + "73"].pack('H*')
     end
 
     it 'decode' do
-      command = MACCommand.from_bytes(["03" + "67" + "ffff" + "73"].pack('H*'), :down)
+      command = MACCommand.from_bytes(["03" + "67" + "cdab" + "73"].pack('H*'), :down)
 
       expect( command.cid ).to eql 3
       expect( command.payload.class ).to eql LinkADRReq
       expect( command.payload.datarate).to eql 6
       expect( command.payload.txpower).to eql 7
-      expect( command.payload.chmask).to eql 0xffff
+      expect( command.payload.chmask).to eql 0xabcd
       expect( command.payload.chmaskctl).to eql 7
       expect( command.payload.nbtrans).to eql 3
 
