@@ -617,6 +617,7 @@ describe 'RXParamSetupReq' do
       expect( command.payload.class ).to eql RXParamSetupReq
       expect( command.payload.dlsettings.rx1droffset).to eql 7
       expect( command.payload.dlsettings.rx2datarate).to eql 15
+      expect( command.payload.frequency).to eql 923_200_000
     end
   end
 end
