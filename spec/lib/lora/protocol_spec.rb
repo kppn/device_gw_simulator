@@ -944,3 +944,269 @@ describe 'DlChannelAns' do
 end
 
 
+#=============================================================
+# PHYPayload with MACCommand(on FOpts)
+#=============================================================
+describe 'PHYPayload with MACCommand(on FOpts)' do
+  describe 'encode' do
+    let(:phypayload) {
+      PHYPayload.new(
+        mhdr: MHDR.new(
+          mtype: MHDR::ConfirmedDataDown
+        ),
+        macpayload: MACPayload.new(
+          fhdr: FHDR.new(
+            devaddr: DevAddr.new(
+              nwkid:   0b1000001,
+              nwkaddr: 0b0_01110000_01111000_01111100
+            ),
+            fctrl: FCtrl.new(
+              adr: false,
+              adrackreq: false,
+              ack: false,
+            ),
+            fcnt: 258,
+            fopts: MACCommand.new(
+              cid: MACCommand::DevStatus,
+              payload: DevStatusReq.new
+            )
+          ),
+          fport: 1,
+          frmpayload: FRMPayload.new("\x01\x02\x03\x04\x05\x06\x07\x08")
+        ),
+      )
+    } 
+
+    it 'without encryption' do
+      expect(phypayload.encode).to eql(
+        ["a0" + "7c787082" + "01" + "0201" + "06" + "01" + "0102030405060708"].pack('H*')
+      )
+    end
+  end
+
+  describe 'decode' do
+    let(:phypayload_encoded_without_encrypt) {
+       ["a0" + "7c787082" + "01" + "0201" + "06" + "01" + "0102030405060708"].pack('H*')
+    }
+
+    it 'without encryption' do
+        phypayload = PHYPayload.from_bytes(phypayload_encoded_without_encrypt)
+
+        expect(phypayload.macpayload.fhdr.fctrl.foptslen).to eql 1
+        expect(phypayload.macpayload.fhdr.fopts.class).to eql Array
+
+        expect(phypayload.macpayload.fhdr.fopts[0].class).to eql MACCommand
+        expect(phypayload.macpayload.fhdr.fopts[0].cid).to eql 6
+        expect(phypayload.macpayload.fhdr.fopts[0].payload.class).to eql DevStatusReq
+    end
+  end
+end
+
+
+#=============================================================
+# PHYPayload with multi MACCommand(on FOpts)
+#=============================================================
+describe 'PHYPayload with multi MACCommand(on FOpts)' do
+  describe 'encode' do
+    let(:phypayload) {
+      PHYPayload.new(
+        mhdr: MHDR.new(
+          mtype: MHDR::ConfirmedDataDown
+        ),
+        macpayload: MACPayload.new(
+          fhdr: FHDR.new(
+            devaddr: DevAddr.new(
+              nwkid:   0b1000001,
+              nwkaddr: 0b0_01110000_01111000_01111100
+            ),
+            fctrl: FCtrl.new(
+              adr: false,
+              adrackreq: false,
+              ack: false,
+            ),
+            fcnt: 258,
+            fopts: [
+              MACCommand.new(
+                cid: MACCommand::DutyCycle,
+                payload: DutyCycleReq.new(
+                  maxdcycle: 15
+                )
+              ),
+              MACCommand.new(
+                cid: MACCommand::DevStatus,
+                payload: DevStatusReq.new
+              )
+            ]
+          ),
+          fport: 1,
+          frmpayload: FRMPayload.new("\x01\x02\x03\x04\x05\x06\x07\x08")
+        ),
+      )
+    } 
+
+    it 'without encryption' do
+      expect(phypayload.encode).to eql(
+        ["a0" + "7c787082" + "03" + "0201" +  "040f" + "06"  + "01" + "0102030405060708"].pack('H*')
+      )
+    end
+  end
+
+  describe 'decode' do
+    let(:phypayload_encoded_without_encrypt) {
+      ["a0" + "7c787082" + "03" + "0201" +  "040f" + "06"  + "01" + "0102030405060708"].pack('H*')
+    }
+
+    it 'without encryption' do
+        phypayload = PHYPayload.from_bytes(phypayload_encoded_without_encrypt)
+
+        expect(phypayload.macpayload.fhdr.fctrl.foptslen).to eql 3
+        expect(phypayload.macpayload.fhdr.fopts.class).to eql Array
+
+        expect(phypayload.macpayload.fhdr.fopts[0].class).to eql MACCommand
+        expect(phypayload.macpayload.fhdr.fopts[0].cid).to eql 4
+
+        expect(phypayload.macpayload.fhdr.fopts[1].class).to eql MACCommand
+        expect(phypayload.macpayload.fhdr.fopts[1].cid).to eql 6
+    end
+  end
+end
+
+
+
+#=============================================================
+# PHYPayload with MACCommand(on FRMPayload)
+#=============================================================
+describe 'PHYPayload with MACCommand(on FRMPayload)' do
+  describe 'encode' do
+    let(:phypayload) {
+      PHYPayload.new(
+        mhdr: MHDR.new(
+          mtype: MHDR::ConfirmedDataDown
+        ),
+        macpayload: MACPayload.new(
+          fhdr: FHDR.new(
+            devaddr: DevAddr.new(
+              nwkid:   0b1000001,
+              nwkaddr: 0b0_01110000_01111000_01111100
+            ),
+            fctrl: FCtrl.new(
+              adr: false,
+              adrackreq: false,
+              ack: false,
+            ),
+            fcnt: 258,
+            fopts: nil
+          ),
+          fport: 0,
+          frmpayload: FRMPayload.new(
+            MACCommand.new(
+              cid: MACCommand::DevStatus,
+              payload: DevStatusReq.new
+            )
+          )
+        ),
+      )
+    } 
+
+    it 'without encryption' do
+      expect(phypayload.encode).to eql(
+        ["a0" + "7c787082" + "00" + "0201" + "00" + "06"].pack('H*')
+      )
+    end
+  end
+
+  describe 'decode' do
+    let(:phypayload_encoded_without_encrypt) {
+        ["a0" + "7c787082" + "00" + "0201" + "00" + "06"].pack('H*')
+    }
+
+    it 'without encryption' do
+        phypayload = PHYPayload.from_bytes(phypayload_encoded_without_encrypt)
+
+        expect(phypayload.macpayload.fhdr.fctrl.foptslen).to eql 0
+        expect(phypayload.macpayload.fhdr.fopts).to be_nil
+
+        expect(phypayload.macpayload.frmpayload.value.class).to eql Array
+        expect(phypayload.macpayload.frmpayload.value[0].class).to eql MACCommand
+        expect(phypayload.macpayload.frmpayload.value[0].cid).to eql 6
+        expect(phypayload.macpayload.frmpayload.value[0].payload.class).to eql DevStatusReq
+    end
+  end
+end
+
+
+
+#=============================================================
+# PHYPayload with multi MACCommand(on FRMPayload)
+#=============================================================
+describe 'PHYPayload with multi MACCommand(on FRMPayload)' do
+  describe 'encode' do
+    let(:phypayload) {
+      PHYPayload.new(
+        mhdr: MHDR.new(
+          mtype: MHDR::ConfirmedDataDown
+        ),
+        macpayload: MACPayload.new(
+          fhdr: FHDR.new(
+            devaddr: DevAddr.new(
+              nwkid:   0b1000001,
+              nwkaddr: 0b0_01110000_01111000_01111100
+            ),
+            fctrl: FCtrl.new(
+              adr: false,
+              adrackreq: false,
+              ack: false,
+            ),
+            fcnt: 258,
+            fopts: nil
+          ),
+          fport: 0,
+          frmpayload: FRMPayload.new(
+            [
+              MACCommand.new(
+                cid: MACCommand::DutyCycle,
+                payload: DutyCycleReq.new(
+                  maxdcycle: 15
+                )
+              ),
+              MACCommand.new(
+                cid: MACCommand::DevStatus,
+                payload: DevStatusReq.new
+              )
+            ]
+          )
+        ),
+      )
+    } 
+
+    it 'without encryption' do
+      expect(phypayload.encode).to eql(
+        ["a0" + "7c787082" + "00" + "0201" + "00" + "040f" + "06"].pack('H*')
+      )
+    end
+  end
+
+  describe 'decode' do
+    let(:phypayload_encoded_without_encrypt) {
+        ["a0" + "7c787082" + "00" + "0201" + "00" + "040f" + "06"].pack('H*')
+    }
+
+    it 'without encryption' do
+        phypayload = PHYPayload.from_bytes(phypayload_encoded_without_encrypt)
+
+        expect(phypayload.macpayload.fhdr.fctrl.foptslen).to eql 0
+        expect(phypayload.macpayload.fhdr.fopts).to be_nil
+
+        expect(phypayload.macpayload.frmpayload.value[0].class).to eql MACCommand
+        expect(phypayload.macpayload.frmpayload.value[0].cid).to eql 4
+        expect(phypayload.macpayload.frmpayload.value[0].payload.class).to eql DutyCycleReq
+
+        expect(phypayload.macpayload.frmpayload.value[1].class).to eql MACCommand
+        expect(phypayload.macpayload.frmpayload.value[1].cid).to eql 6
+        expect(phypayload.macpayload.frmpayload.value[1].payload.class).to eql DevStatusReq
+    end
+  end
+end
+
+
+

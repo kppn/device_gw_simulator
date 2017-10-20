@@ -139,9 +139,11 @@ class LoRaEncryptionService
       raise ArgumentError.new('appskey and nwkskey must be specified')
     end
 
+    payload_key = @phypayload.macpayload.fport == 0 ? @nwkskey : @appskey
+
     enc_pay = LoRaEncryption.encrypt_payload(
                 @phypayload.macpayload.frmpayload.encode,
-                @appskey,
+                payload_key,
                 @phypayload.direction,
                 @phypayload.macpayload.fhdr.devaddr.encode,
                 @phypayload.macpayload.fhdr.fcnt

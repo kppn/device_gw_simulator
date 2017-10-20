@@ -332,8 +332,8 @@ class EIRPDwellTime
                             dwelltime_400ms: 1
                           }],
     [ 4..4,   :uplinkdwelltime,  :enum, {
-                            no_limit:        0,
-                            dwelltime_400ms: 1
+                            no_limit_dummy:        0,   # dup name with downlinkdwelltime
+                            dwelltime_400ms_dummy: 1    # dup name with downlinkdwelltime
                           }],
     [ 3..0,   :maxeirp,   :enum, {
                             maxeirp_8dbm:    0,
@@ -491,6 +491,17 @@ class MACCommand
 
     cmd
   end
+
+  def self.construct_mac_commands(byte_str, direction)
+    commands = []
+    rest_bytes = byte_str.dup
+    while rest_bytes&.length > 0
+      command = self.from_bytes(rest_bytes, direction)
+      rest_bytes = rest_bytes[command.encode.length..-1]
+      commands << command
+    end
+    commands
+  end
 end
 
 
@@ -588,12 +599,17 @@ class FOpts
   define_option_params_initializer
 
   def encode
-    self.value.encode
+    if self.value.kind_of? Array
+      self.value.map(&:encode).join
+    else
+      self.value.encode
+    end
   end
 
   def self.from_bytes(byte_str, direction = :up)
     fopts = self.new
-    fopts.value = MACCommand.from_bytes(byte_str, direction)
+    commands = MACCommand.construct_mac_commands(byte_str, direction)
+    fopts.value = commands
     fopts
   end
 end
@@ -610,7 +626,8 @@ class FHDR
   define_option_params_initializer
   
   def encode
-    [devaddr, fctrl, @fcnt, @fopts].map(&:encode).join
+    fctrl.foptslen = @fopts.encode.length
+    [devaddr, fctrl, @fcnt].map(&:encode).join + @fopts.encode
   end
 
   def self.from_bytes(byte_str, direction = :up)
@@ -644,11 +661,20 @@ class FRMPayload
   end
   
   def encode
-    value.encode&.force_encoding('ASCII-8BIT')
+    if @value.kind_of? Array
+      @value.map(&:encode).join
+    else
+      value.encode&.force_encoding('ASCII-8BIT')
+    end
   end
 
-  def self.from_bytes(byte_str)
-    self.new(byte_str)
+  def self.from_bytes(byte_str, fport = nil, direction = :up)
+    if fport == 0
+      commands = MACCommand.construct_mac_commands(byte_str, direction)
+      self.new(commands)
+    else
+      self.new(byte_str)
+    end
   end
 end
   
@@ -709,7 +735,7 @@ class MACPayload
     macpayload.fhdr       = FHDR.from_bytes(byte_str[0..-1], direction)
     foptslen              = macpayload.fhdr.fctrl.foptslen
     macpayload.fport      = FPort.from_bytes(byte_str[(7+foptslen)..(7+foptslen)])
-    macpayload.frmpayload = FRMPayload.from_bytes(byte_str[(8+foptslen)..-1])
+    macpayload.frmpayload = FRMPayload.from_bytes(byte_str[(8+foptslen)..-1], macpayload.fport, direction)
 
     macpayload
   end
