@@ -231,7 +231,7 @@ describe 'PHYPayload' do
 
         expect(phypayload.macpayload.fport).to eql 1
 
-        expect(phypayload.macpayload.frmpayload).to eql "\x01\x02\x03\x04\x05\x06\x07\x08"
+        expect(phypayload.macpayload.frmpayload.value).to eql "\x01\x02\x03\x04\x05\x06\x07\x08"
       end
     end
 
@@ -357,6 +357,127 @@ describe 'PHYPayload' do
       end
     end
   end
+
+
+  describe 'encode without fport/frmpayload' do
+    let(:appkey)  { ["01" * 16].pack('H*') }
+    let(:appskey) { ["01" * 16].pack('H*') }
+    let(:nwkskey) { ["01" * 16].pack('H*') }
+
+    describe 'empty frame' do
+      let(:phypayload) {
+        PHYPayload.new(
+          mhdr: MHDR.new(
+            mtype: MHDR::UnconfirmedDataUp
+          ),
+          macpayload: MACPayload.new(
+            fhdr: FHDR.new(
+              devaddr: DevAddr.new(
+                nwkid:   0b1000001,
+                nwkaddr: 0b0_01110000_01111000_01111100
+              ),
+              fctrl: FCtrl.new(
+                adr: false,
+                adrackreq: false,
+                ack: false
+              ),
+              fcnt: 258,
+              fopts: nil
+            ),
+          ),
+          mic: '',
+        )
+      }
+
+
+      it 'without encryption' do
+        expect(phypayload.encode).to eql(
+          ["40" + "7c787082" + "00" + "0201"].pack('H*')
+        )
+      end
+
+      it 'with encryption' do
+        encode         = phypayload.encode
+        encode_encrypt = phypayload.encode(appskey: appskey, nwkskey: nwkskey)
+
+        p encode_encrypt.to_hexstr
+
+        expect(encode_encrypt[0..7]).to eql encode[0..7]
+        expect(encode_encrypt.bytesize).to eql encode.bytesize + 4    # MIC appended
+      end
+    end
+  end
+
+  describe 'decode without fport/frmpayload' do
+    let(:appkey)  { ["01" * 16].pack('H*') }
+    let(:appskey) { ["01" * 16].pack('H*') }
+    let(:nwkskey) { ["01" * 16].pack('H*') }
+
+    let(:phypayload_encoded_without_encrypt) {
+      ['407c787082000201'].pack('H*')
+    }
+
+    let(:phypayload_encoded_with_encrypt) {
+      ['407c7870820002011a796d23'].pack('H*')
+    }
+
+    it 'without encryption' do
+      phypayload = PHYPayload.from_bytes(phypayload_encoded_without_encrypt)
+
+      expect(phypayload.mhdr.class).to eql MHDR
+      expect(phypayload.mhdr.mtype).to eql MHDR::UnconfirmedDataUp
+      expect(phypayload.mhdr.major).to eql 0
+
+      expect(phypayload.macpayload.class).to eql MACPayload
+
+      expect(phypayload.macpayload.fhdr.class).to eql FHDR
+
+      expect(phypayload.macpayload.fhdr.devaddr.class).to   eql DevAddr
+      expect(phypayload.macpayload.fhdr.devaddr.nwkid).to   eql 0b1000001
+      expect(phypayload.macpayload.fhdr.devaddr.nwkaddr).to eql 0b0_01110000_01111000_01111100
+
+      expect(phypayload.macpayload.fhdr.fctrl.class).to     eql FCtrl
+      expect(phypayload.macpayload.fhdr.fctrl.adr).to       be false
+      expect(phypayload.macpayload.fhdr.fctrl.adrackreq).to be false
+      expect(phypayload.macpayload.fhdr.fctrl.fpending).to  be false
+      expect(phypayload.macpayload.fhdr.fctrl.foptslen).to  eql 0
+
+      expect(phypayload.macpayload.fhdr.fcnt).to   eql 258
+      expect(phypayload.macpayload.fhdr.fopts).to  eql nil
+
+      expect(phypayload.macpayload.fport).to  eql nil
+      expect(phypayload.macpayload.frmpayload).to  eql nil
+    end
+
+    it 'with encryption' do
+      phypayload = PHYPayload.from_bytes(phypayload_encoded_with_encrypt, appskey: appskey, nwkskey: nwkskey)
+
+      expect(phypayload.mhdr.class).to eql MHDR
+      expect(phypayload.mhdr.mtype).to eql MHDR::UnconfirmedDataUp
+      expect(phypayload.mhdr.major).to eql 0
+
+      expect(phypayload.macpayload.class).to eql MACPayload
+
+      expect(phypayload.macpayload.fhdr.class).to eql FHDR
+
+      expect(phypayload.macpayload.fhdr.devaddr.class).to   eql DevAddr
+      expect(phypayload.macpayload.fhdr.devaddr.nwkid).to   eql 0b1000001
+      expect(phypayload.macpayload.fhdr.devaddr.nwkaddr).to eql 0b0_01110000_01111000_01111100
+
+      expect(phypayload.macpayload.fhdr.fctrl.class).to     eql FCtrl
+      expect(phypayload.macpayload.fhdr.fctrl.adr).to       be false
+      expect(phypayload.macpayload.fhdr.fctrl.adrackreq).to be false
+      expect(phypayload.macpayload.fhdr.fctrl.fpending).to  be false
+      expect(phypayload.macpayload.fhdr.fctrl.foptslen).to  eql 0
+
+      expect(phypayload.macpayload.fhdr.fcnt).to   eql 258
+      expect(phypayload.macpayload.fhdr.fopts).to  eql nil
+
+      expect(phypayload.macpayload.fport).to  eql nil
+      expect(phypayload.macpayload.frmpayload).to  eql nil
+    end
+  end
+
 end
 
 

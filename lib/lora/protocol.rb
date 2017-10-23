@@ -60,6 +60,14 @@ class LinkADRReq
                             sf7_125khz:   5,
                             sf7_250khz:   6,
                             fsk_50kbps:   7,
+                            datarate_unspec08:  8,
+                            datarate_unspec09:  9,
+                            datarate_unspec10: 10,
+                            datarate_unspec11: 11,
+                            datarate_unspec12: 12,
+                            datarate_unspec13: 13,
+                            datarate_unspec14: 14,
+                            datarate_unspec15: 15,
                           }],
     [27..24, :txpower,    :enum, {
                             maxeirp:             0,
@@ -70,6 +78,14 @@ class LinkADRReq
                             maxeirp_minus_10db:  5,
                             maxeirp_minus_12db:  6,
                             maxeirp_minus_14db:  7,
+                            txpower_unspec08:    8,
+                            txpower_unspec09:    9,
+                            txpower_unspec10:   10,
+                            txpower_unspec11:   11,
+                            txpower_unspec12:   12,
+                            txpower_unspec13:   13,
+                            txpower_unspec14:   14,
+                            txpower_unspec15:   15,
                           }],
     [23.. 8, :chmask,     :numeric],
     [ 7,     :undefined],
@@ -669,7 +685,9 @@ class FRMPayload
   end
 
   def self.from_bytes(byte_str, fport = nil, direction = :up)
-    if fport == 0
+    if fport == nil
+      self.new(byte_str)
+    elsif fport == 0
       commands = MACCommand.construct_mac_commands(byte_str, direction)
       self.new(commands)
     else
@@ -729,13 +747,20 @@ class MACPayload
     [fhdr.encode, @fport.encode, frmpayload_enc].join
   end
 
-  def self.from_bytes(byte_str, direction = :up)
+  def self.from_bytes(byte_str, direction = :up, encrypted = false)
     macpayload = self.new
 
     macpayload.fhdr       = FHDR.from_bytes(byte_str[0..-1], direction)
     foptslen              = macpayload.fhdr.fctrl.foptslen
-    macpayload.fport      = FPort.from_bytes(byte_str[(7+foptslen)..(7+foptslen)])
-    macpayload.frmpayload = FRMPayload.from_bytes(byte_str[(8+foptslen)..-1], macpayload.fport, direction)
+
+    if byte_str[7+foptslen]
+      macpayload.fport      = FPort.from_bytes(byte_str[(7+foptslen)..(7+foptslen)])
+      if encrypted
+        macpayload.frmpayload = FRMPayload.from_bytes(byte_str[(8+foptslen)..-1], nil, direction)
+      else
+        macpayload.frmpayload = FRMPayload.from_bytes(byte_str[(8+foptslen)..-1], macpayload.fport, direction)
+      end
+    end
 
     macpayload
   end
